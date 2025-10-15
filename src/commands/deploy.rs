@@ -2,7 +2,7 @@ use anyhow::{bail, Context, Result};
 use std::fs;
 use std::path::Path;
 use crate::api::RedashClient;
-use crate::models::{Config, Dashboard, Query};
+use crate::models::{Config, Query};
 
 fn slugify(s: &str) -> String {
     s.to_lowercase()
@@ -65,23 +65,11 @@ pub async fn deploy(client: &RedashClient) -> Result<()> {
         println!("  ✓ {} - {}", tracked.id, tracked.name);
     }
 
-    println!("\nDeploying {} dashboards...", config.dashboards.len());
-    for tracked in &config.dashboards {
-        let slug = slugify(&tracked.name);
-        let yaml_path = format!("dashboards/{}-{}.yaml", tracked.id, slug);
-
-        if !Path::new(&yaml_path).exists() {
-            bail!("Dashboard file not found: {yaml_path}");
-        }
-
-        let yaml_content = fs::read_to_string(&yaml_path)
-            .context(format!("Failed to read {yaml_path}"))?;
-
-        let dashboard: Dashboard = serde_yaml::from_str(&yaml_content)
-            .context(format!("Failed to parse {yaml_path}"))?;
-
-        client.create_or_update_dashboard(&dashboard).await?;
-        println!("  ✓ {} - {}", tracked.id, tracked.name);
+    if !config.dashboards.is_empty() {
+        println!("\nDashboard deployment is not currently supported.");
+        println!("  The Redash API does not provide a reliable way to update dashboards programmatically.");
+        println!("  Dashboards can be fetched and version-controlled, but must be updated via the Redash UI.");
+        println!("  {} dashboards skipped", config.dashboards.len());
     }
 
     println!("\n✓ All resources deployed successfully");

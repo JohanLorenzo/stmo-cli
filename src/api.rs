@@ -97,23 +97,6 @@ impl RedashClient {
             .context("Failed to parse query update response")
     }
 
-    pub async fn create_or_update_dashboard(&self, dashboard: &Dashboard) -> Result<Dashboard> {
-        let url = format!("{}/api/dashboards/{}", self.base_url, dashboard.id);
-        let response = self.client
-            .post(&url)
-            .json(dashboard)
-            .send()
-            .await
-            .context(format!("Failed to update dashboard {}", dashboard.id))?
-            .error_for_status()
-            .context("API returned error status")?;
-
-        response
-            .json()
-            .await
-            .context("Failed to parse dashboard update response")
-    }
-
     pub async fn fetch_all_queries(&self) -> Result<Vec<Query>> {
         let mut all_queries = Vec::new();
         let mut page = 1;
