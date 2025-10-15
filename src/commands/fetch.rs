@@ -54,16 +54,29 @@ pub async fn fetch(client: &RedashClient) -> Result<()> {
 
     println!("\nFetching {} dashboards...", config.dashboards.len());
     for tracked in &config.dashboards {
-        let dashboard = client.get_dashboard(tracked.id).await?;
-        let slug = slugify(&dashboard.name);
-        let filename = format!("dashboards/{}-{}.yaml", dashboard.id, slug);
+        let dashboard_slug = if let Some(s) = &tracked.slug {
+            s.as_str()
+        } else {
+            println!("  ⚠ {} - {} (skipped: no slug in config)", tracked.id, tracked.name);
+            continue;
+        };
 
-        let yaml_content = serde_yaml::to_string(&dashboard)
-            .context("Failed to serialize dashboard")?;
-        fs::write(&filename, yaml_content)
-            .context(format!("Failed to write {filename}"))?;
+        match client.get_dashboard(dashboard_slug).await {
+            Ok(dashboard) => {
+                let slug = slugify(&dashboard.name);
+                let filename = format!("dashboards/{}-{}.yaml", dashboard.id, slug);
 
-        println!("  ✓ {} - {}", dashboard.id, tracked.name);
+                let yaml_content = serde_yaml::to_string(&dashboard)
+                    .context("Failed to serialize dashboard")?;
+                fs::write(&filename, yaml_content)
+                    .context(format!("Failed to write {filename}"))?;
+
+                println!("  ✓ {} - {}", dashboard.id, tracked.name);
+            }
+            Err(e) => {
+                println!("  ⚠ {} - {} (skipped: {})", tracked.id, tracked.name, e);
+            }
+        }
     }
 
     println!("\n✓ All resources fetched successfully");

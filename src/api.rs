@@ -64,13 +64,13 @@ impl RedashClient {
             .context("Failed to parse query response")
     }
 
-    pub async fn get_dashboard(&self, dashboard_id: u64) -> Result<Dashboard> {
-        let url = format!("{}/api/dashboards/{dashboard_id}", self.base_url);
+    pub async fn get_dashboard(&self, slug: &str) -> Result<Dashboard> {
+        let url = format!("{}/api/dashboards/{slug}", self.base_url);
         let response = self.client
             .get(&url)
             .send()
             .await
-            .context(format!("Failed to fetch dashboard {dashboard_id}"))?
+            .context(format!("Failed to fetch dashboard {slug}"))?
             .error_for_status()
             .context("API returned error status")?;
 

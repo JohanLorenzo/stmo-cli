@@ -75,14 +75,23 @@ pub struct Dashboard {
     pub name: String,
     pub slug: String,
     pub user_id: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<User>,
     pub layout: Vec<Vec<u64>>,
+    #[serde(rename = "dashboard_filters_enabled")]
     pub filters_enabled: bool,
     pub widgets: Vec<Widget>,
+    #[serde(default)]
     pub tags: Option<Vec<String>>,
+    #[serde(default)]
     pub is_archived: bool,
+    #[serde(default)]
     pub is_draft: bool,
+    #[serde(default)]
     pub updated_at: String,
+    #[serde(default)]
     pub created_at: String,
+    #[serde(default)]
     pub version: u64,
 }
 
@@ -92,10 +101,13 @@ pub struct Widget {
     pub width: u64,
     pub options: WidgetOptions,
     pub dashboard_id: u64,
+    #[serde(default)]
     pub text: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub visualization: Option<WidgetVisualization>,
+    #[serde(default)]
     pub created_at: String,
+    #[serde(default)]
     pub updated_at: String,
 }
 
@@ -110,19 +122,19 @@ pub struct WidgetOptions {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Position {
-    #[serde(rename = "autoHeight")]
+    #[serde(rename = "autoHeight", default)]
     pub auto_height: bool,
     #[serde(rename = "sizeX")]
     pub size_x: u64,
     #[serde(rename = "sizeY")]
     pub size_y: u64,
-    #[serde(rename = "minSizeX")]
+    #[serde(rename = "minSizeX", default)]
     pub min_size_x: u64,
-    #[serde(rename = "maxSizeX")]
+    #[serde(rename = "maxSizeX", default)]
     pub max_size_x: u64,
-    #[serde(rename = "minSizeY")]
+    #[serde(rename = "minSizeY", default)]
     pub min_size_y: u64,
-    #[serde(rename = "maxSizeY")]
+    #[serde(rename = "maxSizeY", default)]
     pub max_size_y: u64,
     pub col: u64,
     pub row: u64,
@@ -201,11 +213,15 @@ pub struct QueryMetadata {
 pub struct TrackedResource {
     pub id: u64,
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slug: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct User {
     pub id: u64,
     pub name: String,
     pub email: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile_image_url: Option<String>,
 }

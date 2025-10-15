@@ -45,6 +45,7 @@ pub async fn init(client: &RedashClient) -> Result<()> {
         .map(|&i| TrackedResource {
             id: queries[i].id,
             name: queries[i].name.clone(),
+            slug: None,
         })
         .collect();
 
@@ -53,6 +54,7 @@ pub async fn init(client: &RedashClient) -> Result<()> {
         .map(|&i| TrackedResource {
             id: dashboards[i].id,
             name: dashboards[i].name.clone(),
+            slug: Some(dashboards[i].slug.clone()),
         })
         .collect();
 
