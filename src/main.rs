@@ -25,8 +25,11 @@ enum Commands {
     #[command(about = "Fetch tracked queries and dashboards from Redash")]
     Fetch,
 
-    #[command(about = "Deploy local changes to Redash")]
-    Deploy,
+    #[command(about = "Deploy local changes to Redash (only changed queries by default)")]
+    Deploy {
+        #[arg(long, help = "Deploy all queries instead of only changed ones")]
+        all: bool,
+    },
 }
 
 #[tokio::main]
@@ -45,7 +48,7 @@ async fn main() -> Result<()> {
         Commands::Discover => commands::discover::discover(&client).await?,
         Commands::Init => commands::init::init(&client).await?,
         Commands::Fetch => commands::fetch::fetch(&client).await?,
-        Commands::Deploy => commands::deploy::deploy(&client).await?,
+        Commands::Deploy { all } => commands::deploy::deploy(&client, all).await?,
     }
 
     Ok(())
