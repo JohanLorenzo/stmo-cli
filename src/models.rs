@@ -47,6 +47,20 @@ pub struct Parameter {
     pub enum_options: Option<String>,
     #[serde(rename = "queryId", skip_serializing_if = "Option::is_none")]
     pub query_id: Option<u64>,
+    #[serde(rename = "multiValuesOptions", skip_serializing_if = "Option::is_none")]
+    pub multi_values_options: Option<MultiValuesOptions>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MultiValuesOptions {
+    #[serde(rename = "prefix", skip_serializing_if = "Option::is_none")]
+    pub prefix: Option<String>,
+    #[serde(rename = "suffix", skip_serializing_if = "Option::is_none")]
+    pub suffix: Option<String>,
+    #[serde(rename = "separator", skip_serializing_if = "Option::is_none")]
+    pub separator: Option<String>,
+    #[serde(rename = "quoteCharacter", skip_serializing_if = "Option::is_none")]
+    pub quote_character: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
