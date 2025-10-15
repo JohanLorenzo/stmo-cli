@@ -1,0 +1,9 @@
+repos:
+- repo: local
+  hooks:
+  - id: cargo-clippy
+    name: cargo clippy (pedantic)
+    entry: cargo clippy --all-targets --all-features -- -W clippy::pedantic -D warnings
+    language: system
+    types: [rust]
+    pass_filenames: false
