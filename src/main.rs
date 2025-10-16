@@ -46,7 +46,7 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Commands::Discover => commands::discover::discover(&client).await?,
-        Commands::Init => commands::init::init(&client).await?,
+        Commands::Init => commands::init::init()?,
         Commands::Fetch => commands::fetch::fetch(&client).await?,
         Commands::Deploy { all } => commands::deploy::deploy(&client, all).await?,
     }

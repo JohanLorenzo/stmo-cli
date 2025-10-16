@@ -1,7 +1,8 @@
 use anyhow::{Context, Result};
 use std::fs;
+use std::path::Path;
+
 use crate::api::RedashClient;
-use crate::models::Config;
 
 fn slugify(s: &str) -> String {
     s.to_lowercase()
@@ -14,16 +15,59 @@ fn slugify(s: &str) -> String {
         .join("-")
 }
 
+fn extract_query_ids_from_directory() -> Result<Vec<u64>> {
+    let queries_dir = Path::new("queries");
+
+    if !queries_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut query_ids = Vec::new();
+
+    for entry in fs::read_dir(queries_dir).context("Failed to read queries directory")? {
+        let entry = entry.context("Failed to read directory entry")?;
+        let path = entry.path();
+
+        if path.extension().is_some_and(|ext| ext == "yaml")
+            && let Some(filename) = path.file_name().and_then(|f| f.to_str())
+            && let Some(id_str) = filename.split('-').next()
+            && let Ok(id) = id_str.parse::<u64>()
+        {
+            query_ids.push(id);
+        }
+    }
+
+    query_ids.sort_unstable();
+    query_ids.dedup();
+
+    Ok(query_ids)
+}
+
 pub async fn fetch(client: &RedashClient) -> Result<()> {
-    let config_content = fs::read_to_string("redash-config.yaml")
-        .context("Failed to read redash-config.yaml. Run 'redash-tool init' first.")?;
+    fs::create_dir_all("queries")
+        .context("Failed to create queries directory")?;
+    fs::create_dir_all("dashboards")
+        .context("Failed to create dashboards directory")?;
 
-    let config: Config = serde_yaml::from_str(&config_content)
-        .context("Failed to parse redash-config.yaml")?;
+    let query_ids = extract_query_ids_from_directory()?;
 
-    println!("Fetching {} queries...", config.queries.len());
-    for tracked in &config.queries {
-        let query = client.get_query(tracked.id).await?;
+    let queries_to_fetch = if query_ids.is_empty() {
+        println!("No existing queries found. Fetching all queries you have access to...\n");
+        client.fetch_all_queries().await?
+    } else {
+        println!("Fetching {} queries from local directory...\n", query_ids.len());
+        let mut queries = Vec::new();
+        for id in &query_ids {
+            match client.get_query(*id).await {
+                Ok(query) => queries.push(query),
+                Err(e) => eprintln!("  ⚠ Query {id} failed to fetch: {e}"),
+            }
+        }
+        queries
+    };
+
+    println!("Fetching {} queries...", queries_to_fetch.len());
+    for query in &queries_to_fetch {
         let slug = slugify(&query.name);
         let filename_base = format!("{}-{}", query.id, slug);
 
@@ -33,14 +77,14 @@ pub async fn fetch(client: &RedashClient) -> Result<()> {
 
         let metadata = crate::models::QueryMetadata {
             id: query.id,
-            name: query.name,
-            description: query.description,
+            name: query.name.clone(),
+            description: query.description.clone(),
             data_source_id: query.data_source_id,
             user_id: query.user.as_ref().map(|u| u.id),
-            schedule: query.schedule,
-            options: query.options,
-            visualizations: query.visualizations,
-            tags: query.tags,
+            schedule: query.schedule.clone(),
+            options: query.options.clone(),
+            visualizations: query.visualizations.clone(),
+            tags: query.tags.clone(),
         };
 
         let yaml_path = format!("queries/{filename_base}.yaml");
@@ -49,34 +93,7 @@ pub async fn fetch(client: &RedashClient) -> Result<()> {
         fs::write(&yaml_path, yaml_content)
             .context(format!("Failed to write {yaml_path}"))?;
 
-        println!("  ✓ {} - {}", query.id, tracked.name);
-    }
-
-    println!("\nFetching {} dashboards...", config.dashboards.len());
-    for tracked in &config.dashboards {
-        let dashboard_slug = if let Some(s) = &tracked.slug {
-            s.as_str()
-        } else {
-            println!("  ⚠ {} - {} (skipped: no slug in config)", tracked.id, tracked.name);
-            continue;
-        };
-
-        match client.get_dashboard(dashboard_slug).await {
-            Ok(dashboard) => {
-                let slug = slugify(&dashboard.name);
-                let filename = format!("dashboards/{}-{}.yaml", dashboard.id, slug);
-
-                let yaml_content = serde_yaml::to_string(&dashboard)
-                    .context("Failed to serialize dashboard")?;
-                fs::write(&filename, yaml_content)
-                    .context(format!("Failed to write {filename}"))?;
-
-                println!("  ✓ {} - {}", dashboard.id, tracked.name);
-            }
-            Err(e) => {
-                println!("  ⚠ {} - {} (skipped: {})", tracked.id, tracked.name, e);
-            }
-        }
+        println!("  ✓ {} - {}", query.id, query.name);
     }
 
     println!("\n✓ All resources fetched successfully");

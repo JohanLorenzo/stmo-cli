@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use reqwest::{Client, header};
-use crate::models::{Dashboard, QueriesResponse, Query};
+use crate::models::{QueriesResponse, Query};
 
 #[derive(serde::Deserialize)]
 struct FavoritesResponse {
@@ -64,21 +64,6 @@ impl RedashClient {
             .context("Failed to parse query response")
     }
 
-    pub async fn get_dashboard(&self, slug: &str) -> Result<Dashboard> {
-        let url = format!("{}/api/dashboards/{slug}", self.base_url);
-        let response = self.client
-            .get(&url)
-            .send()
-            .await
-            .context(format!("Failed to fetch dashboard {slug}"))?
-            .error_for_status()
-            .context("API returned error status")?;
-
-        response
-            .json()
-            .await
-            .context("Failed to parse dashboard response")
-    }
 
     pub async fn create_or_update_query(&self, query: &Query) -> Result<Query> {
         let url = format!("{}/api/queries/{}", self.base_url, query.id);

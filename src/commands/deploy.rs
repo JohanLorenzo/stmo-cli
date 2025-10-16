@@ -4,7 +4,7 @@ use std::path::Path;
 use std::process::Command;
 use std::collections::HashSet;
 use crate::api::RedashClient;
-use crate::models::{Config, Query};
+use crate::models::Query;
 
 fn slugify(s: &str) -> String {
     s.to_lowercase()
@@ -55,16 +55,41 @@ fn get_changed_query_ids() -> Result<HashSet<u64>> {
     Ok(changed_ids)
 }
 
-pub async fn deploy(client: &RedashClient, all: bool) -> Result<()> {
-    let config_content = fs::read_to_string("redash-config.yaml")
-        .context("Failed to read redash-config.yaml. Run 'redash-tool init' first.")?;
+fn get_all_query_metadata() -> Result<Vec<(u64, String)>> {
+    let queries_dir = Path::new("queries");
 
-    let config: Config = serde_yaml::from_str(&config_content)
-        .context("Failed to parse redash-config.yaml")?;
+    if !queries_dir.exists() {
+        bail!("queries directory not found. Run 'cargo run -- fetch' first.");
+    }
+
+    let mut queries = Vec::new();
+
+    for entry in fs::read_dir(queries_dir).context("Failed to read queries directory")? {
+        let entry = entry.context("Failed to read directory entry")?;
+        let path = entry.path();
+
+        if path.extension().is_some_and(|ext| ext == "yaml") {
+            let metadata_content = fs::read_to_string(&path)
+                .context(format!("Failed to read {}", path.display()))?;
+
+            let metadata: crate::models::QueryMetadata = serde_yaml::from_str(&metadata_content)
+                .context(format!("Failed to parse {}", path.display()))?;
+
+            queries.push((metadata.id, metadata.name));
+        }
+    }
+
+    queries.sort_by_key(|(id, _)| *id);
+
+    Ok(queries)
+}
+
+pub async fn deploy(client: &RedashClient, all: bool) -> Result<()> {
+    let all_queries = get_all_query_metadata()?;
 
     let queries_to_deploy = if all {
-        println!("Deploying all {} queries...", config.queries.len());
-        config.queries.clone()
+        println!("Deploying all {} queries...\n", all_queries.len());
+        all_queries
     } else {
         let changed_ids = get_changed_query_ids()?;
 
@@ -74,26 +99,24 @@ pub async fn deploy(client: &RedashClient, all: bool) -> Result<()> {
             return Ok(());
         }
 
-        let filtered: Vec<_> = config.queries.iter()
-            .filter(|q| changed_ids.contains(&q.id))
-            .cloned()
+        let filtered: Vec<_> = all_queries
+            .into_iter()
+            .filter(|(id, _)| changed_ids.contains(id))
             .collect();
 
         println!("Deploying {} changed queries...", filtered.len());
-        for id in &changed_ids {
-            if let Some(q) = config.queries.iter().find(|q| q.id == *id) {
-                println!("  → {} - {}", id, q.name);
-            }
+        for (id, name) in &filtered {
+            println!("  → {id} - {name}");
         }
         println!();
 
         filtered
     };
 
-    for tracked in &queries_to_deploy {
-        let slug = slugify(&tracked.name);
-        let sql_path = format!("queries/{}-{}.sql", tracked.id, slug);
-        let yaml_path = format!("queries/{}-{}.yaml", tracked.id, slug);
+    for (id, name) in &queries_to_deploy {
+        let slug = slugify(name);
+        let sql_path = format!("queries/{id}-{slug}.sql");
+        let yaml_path = format!("queries/{id}-{slug}.yaml");
 
         if !Path::new(&sql_path).exists() {
             bail!("Query SQL file not found: {sql_path}");
@@ -129,14 +152,7 @@ pub async fn deploy(client: &RedashClient, all: bool) -> Result<()> {
         };
 
         client.create_or_update_query(&query).await?;
-        println!("  ✓ {} - {}", tracked.id, tracked.name);
-    }
-
-    if !config.dashboards.is_empty() {
-        println!("\nDashboard deployment is not currently supported.");
-        println!("  The Redash API does not provide a reliable way to update dashboards programmatically.");
-        println!("  Dashboards can be fetched and version-controlled, but must be updated via the Redash UI.");
-        println!("  {} dashboards skipped", config.dashboards.len());
+        println!("  ✓ {id} - {name}");
     }
 
     println!("\n✓ All resources deployed successfully");

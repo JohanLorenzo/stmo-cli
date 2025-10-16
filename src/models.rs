@@ -204,12 +204,6 @@ pub struct DashboardSummary {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Config {
-    pub queries: Vec<TrackedResource>,
-    pub dashboards: Vec<TrackedResource>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 pub struct QueryMetadata {
     pub id: u64,
     pub name: String,
@@ -221,14 +215,6 @@ pub struct QueryMetadata {
     pub options: QueryOptions,
     pub visualizations: Vec<Visualization>,
     pub tags: Option<Vec<String>>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct TrackedResource {
-    pub id: u64,
-    pub name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub slug: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
