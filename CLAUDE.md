@@ -35,13 +35,13 @@ src/
 
 **Query**: Full Redash query (id, name, sql, data_source_id, options.parameters, visualizations, schedule, user)
 **QueryMetadata**: YAML variant (excludes user, uses user_id)
-**Dashboard**: Full dashboard with widgets
-**DashboardSummary**: Lightweight dashboard listing
+**CreateQuery**: For creating new queries via deploy
+**Visualization**: Chart/table attached to a query
 
 ## API Client (api.rs)
 
-**Query**: list_my_queries, get_query, fetch_all_queries, create_or_update_query
-**Dashboard**: get_dashboard, fetch_my_dashboard_summaries, create_or_update_dashboard
+**Query**: list_my_queries, get_query, fetch_all_queries, create_query, create_or_update_query
+**Visualization**: create_visualization, update_visualization
 
 ## Testing Guidelines
 

@@ -43,19 +43,27 @@ fn extract_query_ids_from_directory() -> Result<Vec<u64>> {
     Ok(query_ids)
 }
 
-pub async fn fetch(client: &RedashClient) -> Result<()> {
+pub async fn fetch(client: &RedashClient, query_ids: Vec<u64>, all: bool) -> Result<()> {
     fs::create_dir_all("queries")
         .context("Failed to create queries directory")?;
-    fs::create_dir_all("dashboards")
-        .context("Failed to create dashboards directory")?;
 
-    let query_ids = extract_query_ids_from_directory()?;
+    let existing_query_ids = extract_query_ids_from_directory()?;
 
-    let queries_to_fetch = if query_ids.is_empty() {
-        println!("No existing queries found. Fetching all queries you have access to...\n");
-        client.fetch_all_queries().await?
-    } else {
-        println!("Fetching {} queries from local directory...\n", query_ids.len());
+    let queries_to_fetch = if all {
+        if existing_query_ids.is_empty() {
+            anyhow::bail!("No queries found in queries/ directory. Use specific query IDs or run 'discover' to see available queries.");
+        }
+        println!("Fetching {} queries from local directory...\n", existing_query_ids.len());
+        let mut queries = Vec::new();
+        for id in &existing_query_ids {
+            match client.get_query(*id).await {
+                Ok(query) => queries.push(query),
+                Err(e) => eprintln!("  ⚠ Query {id} failed to fetch: {e}"),
+            }
+        }
+        queries
+    } else if !query_ids.is_empty() {
+        println!("Fetching {} specific queries...\n", query_ids.len());
         let mut queries = Vec::new();
         for id in &query_ids {
             match client.get_query(*id).await {
@@ -64,6 +72,8 @@ pub async fn fetch(client: &RedashClient) -> Result<()> {
             }
         }
         queries
+    } else {
+        anyhow::bail!("No query IDs specified. Use --all to fetch tracked queries, or provide specific query IDs.\n\nExamples:\n  cargo run -- fetch --all\n  cargo run -- fetch 123 456 789\n  cargo run -- discover  (to see available queries)");
     };
 
     println!("Fetching {} queries...", queries_to_fetch.len());

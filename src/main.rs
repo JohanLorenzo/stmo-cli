@@ -8,7 +8,7 @@ use api::RedashClient;
 
 #[derive(Parser)]
 #[command(name = "redash-tool")]
-#[command(about = "Version control tool for Redash queries and dashboards", long_about = None)]
+#[command(about = "Version control tool for Redash queries", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -16,14 +16,19 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    #[command(about = "List all queries and dashboards from Redash")]
+    #[command(about = "List all queries from Redash")]
     Discover,
 
-    #[command(about = "Interactively select queries and dashboards to track")]
+    #[command(about = "Create queries directory")]
     Init,
 
-    #[command(about = "Fetch tracked queries and dashboards from Redash")]
-    Fetch,
+    #[command(about = "Fetch queries from Redash")]
+    Fetch {
+        #[arg(help = "Query IDs to fetch (e.g., 123 456 789)")]
+        query_ids: Vec<u64>,
+        #[arg(long, help = "Fetch all queries currently tracked in queries/ directory")]
+        all: bool,
+    },
 
     #[command(about = "Deploy local changes to Redash (only changed queries by default)")]
     Deploy {
@@ -47,7 +52,7 @@ async fn main() -> Result<()> {
     match cli.command {
         Commands::Discover => commands::discover::discover(&client).await?,
         Commands::Init => commands::init::init()?,
-        Commands::Fetch => commands::fetch::fetch(&client).await?,
+        Commands::Fetch { query_ids, all } => commands::fetch::fetch(&client, query_ids, all).await?,
         Commands::Deploy { all } => commands::deploy::deploy(&client, all).await?,
     }
 

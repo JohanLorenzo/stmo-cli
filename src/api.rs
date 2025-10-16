@@ -2,11 +2,6 @@ use anyhow::{Context, Result};
 use reqwest::{Client, header};
 use crate::models::{QueriesResponse, Query};
 
-#[derive(serde::Deserialize)]
-struct FavoritesResponse {
-    results: Vec<crate::models::DashboardSummary>,
-}
-
 pub struct RedashClient {
     client: Client,
     base_url: String,
@@ -106,23 +101,5 @@ impl RedashClient {
         }
 
         Ok(all_queries)
-    }
-
-    pub async fn fetch_my_dashboard_summaries(&self) -> Result<Vec<crate::models::DashboardSummary>> {
-        let url = format!("{}/api/dashboards/favorites", self.base_url);
-        let response = self.client
-            .get(&url)
-            .send()
-            .await
-            .context("Failed to fetch favorite dashboards")?
-            .error_for_status()
-            .context("API returned error status")?;
-
-        let fav_response: FavoritesResponse = response
-            .json()
-            .await
-            .context("Failed to parse favorites response")?;
-
-        Ok(fav_response.results)
     }
 }
