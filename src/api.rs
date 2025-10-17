@@ -77,6 +77,23 @@ impl RedashClient {
             .context("Failed to parse query update response")
     }
 
+    pub async fn update_visualization(&self, viz: &crate::models::Visualization) -> Result<crate::models::Visualization> {
+        let url = format!("{}/api/visualizations/{}", self.base_url, viz.id);
+        let response = self.client
+            .post(&url)
+            .json(viz)
+            .send()
+            .await
+            .context(format!("Failed to update visualization {}", viz.id))?
+            .error_for_status()
+            .context("API returned error status")?;
+
+        response
+            .json()
+            .await
+            .context("Failed to parse visualization update response")
+    }
+
     pub async fn fetch_all_queries(&self) -> Result<Vec<Query>> {
         let mut all_queries = Vec::new();
         let mut page = 1;

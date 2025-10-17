@@ -152,6 +152,11 @@ pub async fn deploy(client: &RedashClient, all: bool) -> Result<()> {
         };
 
         client.create_or_update_query(&query).await?;
+
+        for viz in &query.visualizations {
+            client.update_visualization(viz).await?;
+        }
+
         println!("  ✓ {id} - {name}");
     }
 
