@@ -134,30 +134,47 @@ pub async fn deploy(client: &RedashClient, all: bool) -> Result<()> {
         let metadata: crate::models::QueryMetadata = serde_yaml::from_str(&metadata_content)
             .context(format!("Failed to parse {yaml_path}"))?;
 
-        let query = Query {
-            id: metadata.id,
-            name: metadata.name,
-            description: metadata.description,
-            sql,
-            data_source_id: metadata.data_source_id,
-            user: None,
-            schedule: metadata.schedule,
-            options: metadata.options,
-            visualizations: metadata.visualizations,
-            tags: metadata.tags,
-            is_archived: false,
-            is_draft: false,
-            updated_at: String::new(),
-            created_at: String::new(),
+        let result_query = if *id == 0 {
+            let create_query = crate::models::CreateQuery {
+                name: metadata.name,
+                description: metadata.description,
+                sql,
+                data_source_id: metadata.data_source_id,
+                schedule: metadata.schedule,
+                options: Some(metadata.options),
+                tags: metadata.tags,
+                is_archived: false,
+                is_draft: false,
+            };
+            let created = client.create_query(&create_query).await?;
+            println!("  ✓ Created new query: {} - {name}", created.id);
+            println!("    Update the YAML file with the new ID: {}", created.id);
+            created
+        } else {
+            let query = Query {
+                id: metadata.id,
+                name: metadata.name,
+                description: metadata.description,
+                sql,
+                data_source_id: metadata.data_source_id,
+                user: None,
+                schedule: metadata.schedule,
+                options: metadata.options,
+                visualizations: metadata.visualizations,
+                tags: metadata.tags,
+                is_archived: false,
+                is_draft: false,
+                updated_at: String::new(),
+                created_at: String::new(),
+            };
+            client.create_or_update_query(&query).await?;
+            println!("  ✓ {id} - {name}");
+            query
         };
 
-        client.create_or_update_query(&query).await?;
-
-        for viz in &query.visualizations {
+        for viz in &result_query.visualizations {
             client.update_visualization(viz).await?;
         }
-
-        println!("  ✓ {id} - {name}");
     }
 
     println!("\n✓ All resources deployed successfully");

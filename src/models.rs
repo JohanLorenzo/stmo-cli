@@ -21,6 +21,24 @@ pub struct Query {
     pub created_at: String,
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct CreateQuery {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(rename = "query")]
+    pub sql: String,
+    pub data_source_id: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schedule: Option<Schedule>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub options: Option<QueryOptions>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Vec<String>>,
+    pub is_archived: bool,
+    pub is_draft: bool,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct QueryUser {
     pub id: u64,

@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use reqwest::{Client, header};
-use crate::models::{QueriesResponse, Query};
+use crate::models::{CreateQuery, QueriesResponse, Query};
 
 pub struct RedashClient {
     client: Client,
@@ -59,6 +59,23 @@ impl RedashClient {
             .context("Failed to parse query response")
     }
 
+
+    pub async fn create_query(&self, create_query: &CreateQuery) -> Result<Query> {
+        let url = format!("{}/api/queries", self.base_url);
+        let response = self.client
+            .post(&url)
+            .json(create_query)
+            .send()
+            .await
+            .context("Failed to create query")?
+            .error_for_status()
+            .context("API returned error status")?;
+
+        response
+            .json()
+            .await
+            .context("Failed to parse query create response")
+    }
 
     pub async fn create_or_update_query(&self, query: &Query) -> Result<Query> {
         let url = format!("{}/api/queries/{}", self.base_url, query.id);
