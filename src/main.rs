@@ -32,6 +32,8 @@ enum Commands {
 
     #[command(about = "Deploy local changes to Redash (only changed queries by default)")]
     Deploy {
+        #[arg(help = "Query IDs to deploy (e.g., 123 456 789)")]
+        query_ids: Vec<u64>,
         #[arg(long, help = "Deploy all queries instead of only changed ones")]
         all: bool,
     },
@@ -53,7 +55,7 @@ async fn main() -> Result<()> {
         Commands::Discover => commands::discover::discover(&client).await?,
         Commands::Init => commands::init::init()?,
         Commands::Fetch { query_ids, all } => commands::fetch::fetch(&client, query_ids, all).await?,
-        Commands::Deploy { all } => commands::deploy::deploy(&client, all).await?,
+        Commands::Deploy { query_ids, all } => commands::deploy::deploy(&client, query_ids, all).await?,
     }
 
     Ok(())

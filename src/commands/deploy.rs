@@ -84,10 +84,28 @@ fn get_all_query_metadata() -> Result<Vec<(u64, String)>> {
     Ok(queries)
 }
 
-pub async fn deploy(client: &RedashClient, all: bool) -> Result<()> {
+pub async fn deploy(client: &RedashClient, query_ids: Vec<u64>, all: bool) -> Result<()> {
     let all_queries = get_all_query_metadata()?;
 
-    let queries_to_deploy = if all {
+    let queries_to_deploy = if !query_ids.is_empty() {
+        let ids_set: HashSet<_> = query_ids.iter().copied().collect();
+        let filtered: Vec<_> = all_queries
+            .into_iter()
+            .filter(|(id, _)| ids_set.contains(id))
+            .collect();
+
+        if filtered.is_empty() {
+            bail!("None of the specified query IDs were found in queries/ directory");
+        }
+
+        println!("Deploying {} specific queries...", filtered.len());
+        for (id, name) in &filtered {
+            println!("  → {id} - {name}");
+        }
+        println!();
+
+        filtered
+    } else if all {
         println!("Deploying all {} queries...\n", all_queries.len());
         all_queries
     } else {
@@ -167,9 +185,9 @@ pub async fn deploy(client: &RedashClient, all: bool) -> Result<()> {
                 updated_at: String::new(),
                 created_at: String::new(),
             };
-            client.create_or_update_query(&query).await?;
+            let result = client.create_or_update_query(&query).await?;
             println!("  ✓ {id} - {name}");
-            query
+            result
         };
 
         for viz in &result_query.visualizations {
