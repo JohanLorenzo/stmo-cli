@@ -96,8 +96,6 @@ pub struct Visualization {
     pub viz_type: String,
     pub options: serde_json::Value,
     pub description: Option<String>,
-    pub created_at: String,
-    pub updated_at: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
