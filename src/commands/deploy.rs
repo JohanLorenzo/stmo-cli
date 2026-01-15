@@ -84,6 +84,29 @@ fn get_all_query_metadata() -> Result<Vec<(u64, String)>> {
     Ok(queries)
 }
 
+async fn deploy_visualizations(
+    client: &RedashClient,
+    query_id: u64,
+    visualizations: &[crate::models::Visualization],
+) -> Result<()> {
+    for viz in visualizations {
+        if viz.id == 0 {
+            let viz_to_create = crate::models::CreateVisualization {
+                query_id,
+                name: viz.name.clone(),
+                viz_type: viz.viz_type.clone(),
+                options: viz.options.clone(),
+                description: viz.description.clone(),
+            };
+            let created = client.create_visualization(query_id, &viz_to_create).await?;
+            println!("    ✓ Created visualization: {} (ID: {})", created.name, created.id);
+        } else {
+            client.update_visualization(viz).await?;
+        }
+    }
+    Ok(())
+}
+
 pub async fn deploy(client: &RedashClient, query_ids: Vec<u64>, all: bool) -> Result<()> {
     let all_queries = get_all_query_metadata()?;
 
@@ -154,13 +177,13 @@ pub async fn deploy(client: &RedashClient, query_ids: Vec<u64>, all: bool) -> Re
 
         let result_query = if *id == 0 {
             let create_query = crate::models::CreateQuery {
-                name: metadata.name,
-                description: metadata.description,
+                name: metadata.name.clone(),
+                description: metadata.description.clone(),
                 sql,
                 data_source_id: metadata.data_source_id,
-                schedule: metadata.schedule,
-                options: Some(metadata.options),
-                tags: metadata.tags,
+                schedule: metadata.schedule.clone(),
+                options: Some(metadata.options.clone()),
+                tags: metadata.tags.clone(),
                 is_archived: false,
                 is_draft: false,
             };
@@ -171,15 +194,15 @@ pub async fn deploy(client: &RedashClient, query_ids: Vec<u64>, all: bool) -> Re
         } else {
             let query = Query {
                 id: metadata.id,
-                name: metadata.name,
-                description: metadata.description,
+                name: metadata.name.clone(),
+                description: metadata.description.clone(),
                 sql,
                 data_source_id: metadata.data_source_id,
                 user: None,
-                schedule: metadata.schedule,
-                options: metadata.options,
-                visualizations: metadata.visualizations,
-                tags: metadata.tags,
+                schedule: metadata.schedule.clone(),
+                options: metadata.options.clone(),
+                visualizations: metadata.visualizations.clone(),
+                tags: metadata.tags.clone(),
                 is_archived: false,
                 is_draft: false,
                 updated_at: String::new(),
@@ -190,9 +213,7 @@ pub async fn deploy(client: &RedashClient, query_ids: Vec<u64>, all: bool) -> Re
             result
         };
 
-        for viz in &result_query.visualizations {
-            client.update_visualization(viz).await?;
-        }
+        deploy_visualizations(client, result_query.id, &metadata.visualizations).await?;
     }
 
     println!("\n✓ All resources deployed successfully");

@@ -98,6 +98,17 @@ pub struct Visualization {
     pub description: Option<String>,
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct CreateVisualization {
+    pub query_id: u64,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub viz_type: String,
+    pub options: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct QueriesResponse {
     pub results: Vec<Query>,
