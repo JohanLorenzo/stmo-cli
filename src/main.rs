@@ -37,6 +37,27 @@ enum Commands {
         #[arg(long, help = "Deploy all queries instead of only changed ones")]
         all: bool,
     },
+
+    #[command(about = "Execute a query and display results")]
+    Execute {
+        #[arg(help = "Query ID to execute (must be fetched locally first)")]
+        query_id: u64,
+
+        #[arg(long, help = "Query parameter in format: name=value (can be used multiple times)")]
+        param: Vec<String>,
+
+        #[arg(long, short = 'f', default_value = "json", help = "Output format: json or table")]
+        format: String,
+
+        #[arg(long, short = 'i', help = "Prompt for missing parameters interactively")]
+        interactive: bool,
+
+        #[arg(long, default_value = "300", help = "Timeout in seconds")]
+        timeout: u64,
+
+        #[arg(long, help = "Limit number of rows displayed (default: 100)")]
+        limit: Option<usize>,
+    },
 }
 
 #[tokio::main]
@@ -56,6 +77,20 @@ async fn main() -> Result<()> {
         Commands::Init => commands::init::init()?,
         Commands::Fetch { query_ids, all } => commands::fetch::fetch(&client, query_ids, all).await?,
         Commands::Deploy { query_ids, all } => commands::deploy::deploy(&client, query_ids, all).await?,
+        Commands::Execute { query_id, param, format, interactive, timeout, limit } => {
+            let output_format = format.parse::<commands::execute::OutputFormat>()
+                .context("Invalid output format")?;
+            let limit_rows = limit.or(Some(100));
+            commands::execute::execute(
+                &client,
+                query_id,
+                param,
+                output_format,
+                interactive,
+                timeout,
+                limit_rows,
+            ).await?;
+        }
     }
 
     Ok(())

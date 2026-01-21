@@ -153,4 +153,127 @@ impl RedashClient {
 
         Ok(all_queries)
     }
+
+    pub async fn refresh_query(
+        &self,
+        query_id: u64,
+        parameters: Option<std::collections::HashMap<String, serde_json::Value>>,
+    ) -> Result<crate::models::Job> {
+        let url = format!("{}/api/queries/{query_id}/results", self.base_url);
+
+        let request = crate::models::RefreshRequest {
+            max_age: 0,
+            parameters,
+        };
+
+        let response = self.client
+            .post(&url)
+            .json(&request)
+            .send()
+            .await
+            .context(format!("Failed to refresh query {query_id}"))?
+            .error_for_status()
+            .context("API returned error status")?;
+
+        let job_response: crate::models::JobResponse = response
+            .json()
+            .await
+            .context("Failed to parse job response")?;
+
+        Ok(job_response.job)
+    }
+
+    pub async fn poll_job(&self, job_id: &str) -> Result<crate::models::Job> {
+        let url = format!("{}/api/jobs/{job_id}", self.base_url);
+
+        let response = self.client
+            .get(&url)
+            .send()
+            .await
+            .context(format!("Failed to poll job {job_id}"))?
+            .error_for_status()
+            .context("API returned error status")?;
+
+        let job_response: crate::models::JobResponse = response
+            .json()
+            .await
+            .context("Failed to parse job response")?;
+
+        Ok(job_response.job)
+    }
+
+    pub async fn get_query_result(
+        &self,
+        query_id: u64,
+        result_id: u64,
+    ) -> Result<crate::models::QueryResult> {
+        let url = format!(
+            "{}/api/queries/{query_id}/results/{result_id}.json",
+            self.base_url
+        );
+
+        let response = self.client
+            .get(&url)
+            .send()
+            .await
+            .context(format!("Failed to fetch result {result_id} for query {query_id}"))?
+            .error_for_status()
+            .context("API returned error status")?;
+
+        let result_response: crate::models::QueryResultResponse = response
+            .json()
+            .await
+            .context("Failed to parse query result response")?;
+
+        Ok(result_response.query_result)
+    }
+
+    pub async fn execute_query_with_polling(
+        &self,
+        query_id: u64,
+        parameters: Option<std::collections::HashMap<String, serde_json::Value>>,
+        timeout_secs: u64,
+        poll_interval_ms: u64,
+    ) -> Result<crate::models::QueryResult> {
+        use tokio::time::{sleep, Duration};
+        use crate::models::JobStatus;
+
+        eprintln!("Executing query {query_id}...");
+        let job = self.refresh_query(query_id, parameters).await?;
+
+        let start = std::time::Instant::now();
+        let timeout = Duration::from_secs(timeout_secs);
+        let poll_interval = Duration::from_millis(poll_interval_ms);
+
+        let mut current_job = job;
+        loop {
+            if start.elapsed() > timeout {
+                anyhow::bail!("Query execution timed out after {timeout_secs} seconds");
+            }
+
+            let status = JobStatus::from_u8(current_job.status)?;
+
+            match status {
+                JobStatus::Success => {
+                    let result_id = current_job.query_result_id
+                        .context("Job succeeded but no result_id returned")?;
+
+                    eprintln!("Query completed, fetching results...");
+                    return self.get_query_result(query_id, result_id).await;
+                }
+                JobStatus::Failure => {
+                    let error = current_job.error.unwrap_or_else(|| "Unknown error".to_string());
+                    anyhow::bail!("Query execution failed: {error}");
+                }
+                JobStatus::Cancelled => {
+                    anyhow::bail!("Query execution was cancelled");
+                }
+                JobStatus::Pending | JobStatus::Started => {
+                    eprint!(".");
+                    sleep(poll_interval).await;
+                    current_job = self.poll_job(&current_job.id).await?;
+                }
+            }
+        }
+    }
 }

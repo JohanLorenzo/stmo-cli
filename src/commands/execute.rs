@@ -1,0 +1,296 @@
+use anyhow::{Context, Result, bail};
+use std::collections::HashMap;
+use std::fs;
+use std::path::Path;
+use crate::api::RedashClient;
+use crate::models::{QueryMetadata, Parameter};
+
+fn parse_parameter_arg(arg: &str) -> Result<(String, serde_json::Value)> {
+    let parts: Vec<&str> = arg.splitn(2, '=').collect();
+    if parts.len() != 2 {
+        bail!("Invalid parameter format. Use: --param name=value");
+    }
+
+    let name = parts[0].to_string();
+    let value_str = parts[1];
+
+    let value = if let Ok(json_value) = serde_json::from_str(value_str) {
+        json_value
+    } else {
+        serde_json::Value::String(value_str.to_string())
+    };
+
+    Ok((name, value))
+}
+
+fn load_query_metadata_by_id(query_id: u64) -> Result<(QueryMetadata, String, String)> {
+    let queries_dir = Path::new("queries");
+
+    for entry in fs::read_dir(queries_dir).context("Failed to read queries directory")? {
+        let entry = entry.context("Failed to read directory entry")?;
+        let path = entry.path();
+
+        if path.extension().is_some_and(|ext| ext == "yaml")
+            && let Some(filename) = path.file_name().and_then(|f| f.to_str())
+            && let Some(id_str) = filename.split('-').next()
+            && let Ok(id) = id_str.parse::<u64>()
+            && id == query_id
+        {
+            let yaml_content = fs::read_to_string(&path)
+                .context(format!("Failed to read {}", path.display()))?;
+
+            let metadata: QueryMetadata = serde_yaml::from_str(&yaml_content)
+                .context(format!("Failed to parse {}", path.display()))?;
+
+            let yaml_path = path.display().to_string();
+            let sql_path = yaml_path.replace(".yaml", ".sql");
+
+            if !Path::new(&sql_path).exists() {
+                bail!("SQL file not found: {sql_path}");
+            }
+
+            let sql = fs::read_to_string(&sql_path)
+                .context(format!("Failed to read {sql_path}"))?;
+
+            return Ok((metadata, sql, yaml_path));
+        }
+    }
+
+    bail!("Query {query_id} not found in queries/ directory. Run 'cargo run -- fetch {query_id}' first.");
+}
+
+fn prompt_for_parameter(param: &Parameter) -> Result<serde_json::Value> {
+    use dialoguer::{Input, Select};
+
+    let title = &param.title;
+
+    match param.param_type.as_str() {
+        "date" => {
+            let input: String = Input::new()
+                .with_prompt(format!("{title} (YYYY-MM-DD)"))
+                .interact_text()?;
+            Ok(serde_json::Value::String(input))
+        }
+        "enum" => {
+            if let Some(enum_options) = &param.enum_options {
+                let options: Vec<&str> = enum_options.lines().collect();
+
+                if param.multi_values_options.is_some() {
+                    use dialoguer::MultiSelect;
+                    let selections = MultiSelect::new()
+                        .with_prompt(title)
+                        .items(&options)
+                        .interact()?;
+
+                    let selected: Vec<String> = selections.iter()
+                        .map(|&i| options[i].to_string())
+                        .collect();
+
+                    Ok(serde_json::Value::Array(
+                        selected.into_iter().map(serde_json::Value::String).collect()
+                    ))
+                } else {
+                    let selection = Select::new()
+                        .with_prompt(title)
+                        .items(&options)
+                        .default(0)
+                        .interact()?;
+
+                    Ok(serde_json::Value::String(options[selection].to_string()))
+                }
+            } else {
+                let input: String = Input::new()
+                    .with_prompt(title)
+                    .interact_text()?;
+                Ok(serde_json::Value::String(input))
+            }
+        }
+        "number" => {
+            let input: f64 = Input::new()
+                .with_prompt(title)
+                .interact_text()?;
+            Ok(serde_json::json!(input))
+        }
+        "text" => {
+            let input: String = Input::new()
+                .with_prompt(title)
+                .interact_text()?;
+            Ok(serde_json::Value::String(input))
+        }
+        _ => {
+            let input: String = Input::new()
+                .with_prompt(title)
+                .interact_text()?;
+            Ok(serde_json::Value::String(input))
+        }
+    }
+}
+
+fn build_parameter_map(
+    metadata: &QueryMetadata,
+    cli_params: &[(String, serde_json::Value)],
+    interactive: bool,
+) -> Result<Option<HashMap<String, serde_json::Value>>> {
+    if metadata.options.parameters.is_empty() {
+        return Ok(None);
+    }
+
+    let mut param_map = HashMap::new();
+
+    for (name, value) in cli_params {
+        param_map.insert(name.clone(), value.clone());
+    }
+
+    for param in &metadata.options.parameters {
+        if !param_map.contains_key(&param.name) {
+            if interactive {
+                eprintln!("\nParameter '{}' required:", param.title);
+                let value = prompt_for_parameter(param)?;
+                param_map.insert(param.name.clone(), value);
+            } else if let Some(default_value) = &param.value {
+                param_map.insert(param.name.clone(), default_value.clone());
+            } else {
+                bail!(
+                    "Missing required parameter: '{}' ({}). Use --param {}=value or --interactive",
+                    param.name, param.title, param.name
+                );
+            }
+        }
+    }
+
+    Ok(if param_map.is_empty() { None } else { Some(param_map) })
+}
+
+fn format_results_json(result: &crate::models::QueryResult, limit: Option<usize>) -> Result<String> {
+    let rows = if let Some(limit) = limit {
+        result.data.rows.iter().take(limit).cloned().collect::<Vec<_>>()
+    } else {
+        result.data.rows.clone()
+    };
+
+    let formatted = serde_json::json!({
+        "columns": result.data.columns.iter().map(|c| &c.name).collect::<Vec<_>>(),
+        "rows": rows,
+        "row_count": result.data.rows.len(),
+        "runtime_seconds": result.runtime,
+    });
+
+    serde_json::to_string_pretty(&formatted)
+        .context("Failed to format results as JSON")
+}
+
+fn format_results_table(result: &crate::models::QueryResult, limit: Option<usize>) -> String {
+    use std::fmt::Write;
+
+    let mut output = String::new();
+
+    let _ = writeln!(output);
+    for col in &result.data.columns {
+        let _ = write!(output, "{:20} ", col.name);
+    }
+    let _ = writeln!(output);
+    let _ = writeln!(output, "{}", "-".repeat(result.data.columns.len() * 21));
+
+    let rows_to_show = limit.unwrap_or(result.data.rows.len()).min(result.data.rows.len());
+
+    for row in &result.data.rows[..rows_to_show] {
+        if let serde_json::Value::Object(obj) = row {
+            for col in &result.data.columns {
+                let value = obj.get(&col.name)
+                    .map(|v| match v {
+                        serde_json::Value::Null => "NULL".to_string(),
+                        serde_json::Value::String(s) => s.clone(),
+                        _ => v.to_string(),
+                    })
+                    .unwrap_or_default();
+
+                let truncated = if value.len() > 18 {
+                    format!("{}...", &value[..15])
+                } else {
+                    value
+                };
+
+                let _ = write!(output, "{truncated:20} ");
+            }
+            let _ = writeln!(output);
+        }
+    }
+
+    if rows_to_show < result.data.rows.len() {
+        let _ = write!(output, "\n... {} more rows (showing {} of {})\n",
+            result.data.rows.len() - rows_to_show,
+            rows_to_show,
+            result.data.rows.len()
+        );
+    }
+
+    let _ = write!(output, "\n✓ {} rows returned in {:.2}s\n",
+        result.data.rows.len(), result.runtime);
+
+    output
+}
+
+pub async fn execute(
+    client: &RedashClient,
+    query_id: u64,
+    param_args: Vec<String>,
+    format: OutputFormat,
+    interactive: bool,
+    timeout_secs: u64,
+    limit_rows: Option<usize>,
+) -> Result<()> {
+    let (metadata, _sql, yaml_path) = load_query_metadata_by_id(query_id)?;
+
+    println!("Executing query: {} - {}", metadata.id, metadata.name);
+    println!("Source: {yaml_path}\n");
+
+    let cli_params: Vec<(String, serde_json::Value)> = param_args
+        .iter()
+        .map(|arg| parse_parameter_arg(arg))
+        .collect::<Result<Vec<_>>>()?;
+
+    let parameters = build_parameter_map(&metadata, &cli_params, interactive)?;
+
+    if let Some(ref params) = parameters {
+        eprintln!("Parameters:");
+        for (name, value) in params {
+            eprintln!("  {name} = {value}");
+        }
+        eprintln!();
+    }
+
+    let result = client
+        .execute_query_with_polling(query_id, parameters, timeout_secs, 500)
+        .await?;
+
+    match format {
+        OutputFormat::Json => {
+            let json = format_results_json(&result, limit_rows)?;
+            println!("\n{json}");
+        }
+        OutputFormat::Table => {
+            let table = format_results_table(&result, limit_rows);
+            println!("{table}");
+        }
+    }
+
+    Ok(())
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum OutputFormat {
+    Json,
+    Table,
+}
+
+impl std::str::FromStr for OutputFormat {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        match s.to_lowercase().as_str() {
+            "json" => Ok(Self::Json),
+            "table" => Ok(Self::Table),
+            _ => bail!("Invalid format. Use: json or table"),
+        }
+    }
+}

@@ -139,3 +139,75 @@ pub struct User {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub profile_image_url: Option<String>,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RefreshRequest {
+    pub max_age: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parameters: Option<std::collections::HashMap<String, serde_json::Value>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JobResponse {
+    pub job: Job,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Job {
+    pub id: String,
+    pub status: u8,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub query_result_id: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct QueryResultResponse {
+    pub query_result: QueryResult,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct QueryResult {
+    pub id: u64,
+    pub data: QueryResultData,
+    pub runtime: f64,
+    pub retrieved_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct QueryResultData {
+    pub columns: Vec<Column>,
+    pub rows: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Column {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub type_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub friendly_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum JobStatus {
+    Pending = 1,
+    Started = 2,
+    Success = 3,
+    Failure = 4,
+    Cancelled = 5,
+}
+
+impl JobStatus {
+    pub fn from_u8(status: u8) -> anyhow::Result<Self> {
+        match status {
+            1 => Ok(Self::Pending),
+            2 => Ok(Self::Started),
+            3 => Ok(Self::Success),
+            4 => Ok(Self::Failure),
+            5 => Ok(Self::Cancelled),
+            _ => Err(anyhow::anyhow!("Invalid job status: {status}")),
+        }
+    }
+}

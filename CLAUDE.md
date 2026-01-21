@@ -4,7 +4,7 @@ Rust CLI for version controlling Redash queries and dashboards.
 
 ## Quick Reference
 
-**Commands**: `discover` `init` `fetch` `deploy`
+**Commands**: `discover` `init` `fetch` `deploy` `execute` `data-sources`
 **Env Vars**: `REDASH_API_KEY` (required), `REDASH_URL` (optional, defaults to sql.telemetry.mozilla.org)
 
 ## Key Constraints
@@ -21,6 +21,7 @@ Rust CLI for version controlling Redash queries and dashboards.
 ```
 src/
 ├── main.rs              # CLI entry point with clap
+├── lib.rs               # Library exports for testing
 ├── api.rs               # Redash API client
 ├── models.rs            # Data structures
 └── commands/
@@ -28,7 +29,9 @@ src/
     ├── discover.rs      # List all resources
     ├── init.rs          # Create directory
     ├── fetch.rs         # Download queries, slugify()
-    └── deploy.rs        # Upload changes
+    ├── deploy.rs        # Upload changes
+    ├── execute.rs       # Execute queries
+    └── datasources.rs   # List/explore data sources
 ```
 
 ## Data Models
@@ -36,12 +39,20 @@ src/
 **Query**: Full Redash query (id, name, sql, data_source_id, options.parameters, visualizations, schedule, user)
 **QueryMetadata**: YAML variant (excludes user, uses user_id)
 **CreateQuery**: For creating new queries via deploy
-**Visualization**: Chart/table attached to a query
+**DataSource**: id, name, ds_type, syntax, paused, view_only
+**JobStatus**: Pending=1, Started=2, Success=3, Failure=4, Cancelled=5
 
 ## API Client (api.rs)
 
 **Query**: list_my_queries, get_query, fetch_all_queries, create_query, create_or_update_query
 **Visualization**: create_visualization, update_visualization
+**Execution**: refresh_query, poll_job, get_query_result, execute_query_with_polling
+**Data Source**: list_data_sources, get_data_source, get_data_source_schema
+
+## Testing
+
+**Run**: `cargo test` (wiremock for HTTP mocking)
+**Locations**: tests/api_integration.rs, src/models.rs, src/commands/*.rs
 
 ## Testing Guidelines
 
