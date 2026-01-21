@@ -1,3 +1,5 @@
+#![allow(clippy::missing_errors_doc)]
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -209,5 +211,87 @@ impl JobStatus {
             5 => Ok(Self::Cancelled),
             _ => Err(anyhow::anyhow!("Invalid job status: {status}")),
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::missing_errors_doc)]
+#[allow(clippy::unnecessary_literal_unwrap)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_job_status_from_u8_valid() {
+        assert!(matches!(JobStatus::from_u8(1).unwrap(), JobStatus::Pending));
+        assert!(matches!(JobStatus::from_u8(2).unwrap(), JobStatus::Started));
+        assert!(matches!(JobStatus::from_u8(3).unwrap(), JobStatus::Success));
+        assert!(matches!(JobStatus::from_u8(4).unwrap(), JobStatus::Failure));
+        assert!(matches!(JobStatus::from_u8(5).unwrap(), JobStatus::Cancelled));
+    }
+
+    #[test]
+    fn test_job_status_from_u8_invalid() {
+        assert!(JobStatus::from_u8(0).is_err());
+        assert!(JobStatus::from_u8(6).is_err());
+        assert!(JobStatus::from_u8(255).is_err());
+
+        let err = JobStatus::from_u8(10).unwrap_err();
+        assert!(err.to_string().contains("Invalid job status"));
+    }
+
+    #[test]
+    fn test_query_serialization() {
+        let query = Query {
+            id: 1,
+            name: "Test Query".to_string(),
+            description: None,
+            sql: "SELECT * FROM table".to_string(),
+            data_source_id: 63,
+            user: None,
+            schedule: None,
+            options: QueryOptions { parameters: vec![] },
+            visualizations: vec![],
+            tags: None,
+            is_archived: false,
+            is_draft: false,
+            updated_at: "2026-01-21".to_string(),
+            created_at: "2026-01-21".to_string(),
+        };
+
+        let json = serde_json::to_string(&query).unwrap();
+        assert!(json.contains("\"query\":"));
+        assert!(json.contains("SELECT * FROM table"));
+    }
+
+    #[test]
+    fn test_query_metadata_deserialization() {
+        let yaml = r"
+id: 100064
+name: Test Query
+description: null
+data_source_id: 63
+user_id: 530
+schedule: null
+options:
+  parameters:
+    - name: project
+      title: project
+      type: enum
+      value:
+        - try
+      enumOptions: |
+        try
+        autoland
+visualizations: []
+tags:
+  - bug 1840828
+";
+
+        let metadata: QueryMetadata = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(metadata.id, 100_064);
+        assert_eq!(metadata.name, "Test Query");
+        assert_eq!(metadata.data_source_id, 63);
+        assert_eq!(metadata.options.parameters.len(), 1);
+        assert_eq!(metadata.options.parameters[0].name, "project");
     }
 }

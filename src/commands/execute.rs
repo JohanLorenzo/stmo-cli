@@ -1,3 +1,6 @@
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::missing_panics_doc)]
+
 use anyhow::{Context, Result, bail};
 use std::collections::HashMap;
 use std::fs;
@@ -292,5 +295,181 @@ impl std::str::FromStr for OutputFormat {
             "table" => Ok(Self::Table),
             _ => bail!("Invalid format. Use: json or table"),
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::missing_errors_doc)]
+mod tests {
+    use super::*;
+    use crate::models::{QueryResult, QueryResultData, Column};
+
+    #[test]
+    fn test_parse_parameter_arg_string() {
+        let result = parse_parameter_arg("name=value").unwrap();
+        assert_eq!(result.0, "name");
+        assert_eq!(result.1, serde_json::Value::String("value".to_string()));
+    }
+
+    #[test]
+    fn test_parse_parameter_arg_json_array() {
+        let result = parse_parameter_arg("channels=[\"release\",\"beta\"]").unwrap();
+        assert_eq!(result.0, "channels");
+        assert_eq!(result.1, serde_json::json!(["release", "beta"]));
+    }
+
+    #[test]
+    fn test_parse_parameter_arg_number() {
+        let result = parse_parameter_arg("count=42").unwrap();
+        assert_eq!(result.0, "count");
+        assert_eq!(result.1, serde_json::json!(42));
+    }
+
+    #[test]
+    fn test_parse_parameter_arg_invalid() {
+        let result = parse_parameter_arg("invalid");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid parameter format"));
+    }
+
+    #[test]
+    fn test_format_results_json() {
+        let result = QueryResult {
+            id: 1,
+            data: QueryResultData {
+                columns: vec![
+                    Column { name: "col1".to_string(), type_name: "string".to_string(), friendly_name: None },
+                    Column { name: "col2".to_string(), type_name: "integer".to_string(), friendly_name: None },
+                ],
+                rows: vec![
+                    serde_json::json!({"col1": "value1", "col2": 123}),
+                    serde_json::json!({"col1": "value2", "col2": 456}),
+                ],
+            },
+            runtime: 1.5,
+            retrieved_at: "2026-01-21T10:00:00".to_string(),
+        };
+
+        let json = format_results_json(&result, None).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed["row_count"], 2);
+        assert_eq!(parsed["runtime_seconds"], 1.5);
+        assert_eq!(parsed["columns"], serde_json::json!(["col1", "col2"]));
+        assert_eq!(parsed["rows"][0]["col1"], "value1");
+    }
+
+    #[test]
+    fn test_format_results_json_with_limit() {
+        let result = QueryResult {
+            id: 1,
+            data: QueryResultData {
+                columns: vec![
+                    Column { name: "col1".to_string(), type_name: "string".to_string(), friendly_name: None },
+                ],
+                rows: vec![
+                    serde_json::json!({"col1": "row1"}),
+                    serde_json::json!({"col1": "row2"}),
+                    serde_json::json!({"col1": "row3"}),
+                ],
+            },
+            runtime: 1.0,
+            retrieved_at: "2026-01-21T10:00:00".to_string(),
+        };
+
+        let json = format_results_json(&result, Some(2)).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed["row_count"], 3);
+        assert_eq!(parsed["rows"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_format_results_table() {
+        let result = QueryResult {
+            id: 1,
+            data: QueryResultData {
+                columns: vec![
+                    Column { name: "col1".to_string(), type_name: "string".to_string(), friendly_name: None },
+                    Column { name: "col2".to_string(), type_name: "integer".to_string(), friendly_name: None },
+                ],
+                rows: vec![
+                    serde_json::json!({"col1": "value1", "col2": 123}),
+                    serde_json::json!({"col1": "value2", "col2": 456}),
+                ],
+            },
+            runtime: 1.5,
+            retrieved_at: "2026-01-21T10:00:00".to_string(),
+        };
+
+        let table = format_results_table(&result, None);
+
+        assert!(table.contains("col1"));
+        assert!(table.contains("col2"));
+        assert!(table.contains("value1"));
+        assert!(table.contains("value2"));
+        assert!(table.contains("2 rows returned"));
+    }
+
+    #[test]
+    fn test_format_results_table_with_limit() {
+        let result = QueryResult {
+            id: 1,
+            data: QueryResultData {
+                columns: vec![
+                    Column { name: "col1".to_string(), type_name: "string".to_string(), friendly_name: None },
+                ],
+                rows: vec![
+                    serde_json::json!({"col1": "row1"}),
+                    serde_json::json!({"col1": "row2"}),
+                    serde_json::json!({"col1": "row3"}),
+                ],
+            },
+            runtime: 1.0,
+            retrieved_at: "2026-01-21T10:00:00".to_string(),
+        };
+
+        let table = format_results_table(&result, Some(2));
+
+        assert!(table.contains("row1"));
+        assert!(table.contains("row2"));
+        assert!(table.contains("... 1 more rows"));
+        assert!(table.contains("3 rows returned"));
+    }
+
+    #[test]
+    fn test_format_results_table_truncation() {
+        let result = QueryResult {
+            id: 1,
+            data: QueryResultData {
+                columns: vec![
+                    Column { name: "col1".to_string(), type_name: "string".to_string(), friendly_name: None },
+                ],
+                rows: vec![
+                    serde_json::json!({"col1": "this_is_a_very_long_value_that_should_be_truncated"}),
+                ],
+            },
+            runtime: 1.0,
+            retrieved_at: "2026-01-21T10:00:00".to_string(),
+        };
+
+        let table = format_results_table(&result, None);
+
+        assert!(table.contains("..."));
+    }
+
+    #[test]
+    fn test_output_format_from_str() {
+        assert!(matches!("json".parse::<OutputFormat>().unwrap(), OutputFormat::Json));
+        assert!(matches!("JSON".parse::<OutputFormat>().unwrap(), OutputFormat::Json));
+        assert!(matches!("table".parse::<OutputFormat>().unwrap(), OutputFormat::Table));
+        assert!(matches!("TABLE".parse::<OutputFormat>().unwrap(), OutputFormat::Table));
+    }
+
+    #[test]
+    fn test_output_format_from_str_invalid() {
+        let result = "csv".parse::<OutputFormat>();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid format"));
     }
 }

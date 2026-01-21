@@ -1,3 +1,5 @@
+#![allow(clippy::missing_errors_doc)]
+
 use anyhow::{Context, Result};
 use reqwest::{Client, header};
 use crate::models::{CreateQuery, QueriesResponse, Query};

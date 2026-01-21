@@ -1,3 +1,5 @@
+#![allow(clippy::missing_errors_doc)]
+
 use anyhow::{bail, Context, Result};
 use std::fs;
 use std::path::Path;

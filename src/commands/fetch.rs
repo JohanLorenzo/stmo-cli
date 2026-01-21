@@ -1,3 +1,5 @@
+#![allow(clippy::missing_errors_doc)]
+
 use anyhow::{Context, Result};
 use std::fs;
 use std::path::Path;
@@ -109,4 +111,51 @@ pub async fn fetch(client: &RedashClient, query_ids: Vec<u64>, all: bool) -> Res
     println!("\n✓ All resources fetched successfully");
 
     Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::missing_errors_doc)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_slugify_simple() {
+        assert_eq!(slugify("Hello World"), "hello-world");
+    }
+
+    #[test]
+    fn test_slugify_special_chars() {
+        assert_eq!(slugify("Foo & Bar!"), "foo-bar");
+        assert_eq!(slugify("Test@#$%Query"), "test-query");
+    }
+
+    #[test]
+    fn test_slugify_unicode() {
+        assert_eq!(slugify("Café Münch"), "café-münch");
+        assert_eq!(slugify("日本語"), "日本語");
+    }
+
+    #[test]
+    fn test_slugify_multiple_spaces() {
+        assert_eq!(slugify("a  b   c"), "a-b-c");
+        assert_eq!(slugify("  leading and trailing  "), "leading-and-trailing");
+    }
+
+    #[test]
+    fn test_slugify_already_slugified() {
+        assert_eq!(slugify("already-slug"), "already-slug");
+        assert_eq!(slugify("some-kebab-case"), "some-kebab-case");
+    }
+
+    #[test]
+    fn test_slugify_numbers() {
+        assert_eq!(slugify("Query 123"), "query-123");
+        assert_eq!(slugify("123-456"), "123-456");
+    }
+
+    #[test]
+    fn test_slugify_mixed() {
+        assert_eq!(slugify("Mozilla's .deb Package!"), "mozilla-s-deb-package");
+        assert_eq!(slugify("Copy of 100234 - Gecko decision task"), "copy-of-100234-gecko-decision-task");
+    }
 }
