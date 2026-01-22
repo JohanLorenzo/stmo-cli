@@ -142,6 +142,38 @@ pub struct User {
     pub profile_image_url: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DataSource {
+    pub id: u64,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub ds_type: String,
+    pub syntax: Option<String>,
+    pub description: Option<String>,
+    pub paused: u8,
+    pub pause_reason: Option<String>,
+    pub view_only: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub queue_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scheduled_queue_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub groups: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub options: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DataSourceSchema {
+    pub schema: Vec<SchemaTable>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SchemaTable {
+    pub name: String,
+    pub columns: Vec<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RefreshRequest {
     pub max_age: u64,
@@ -293,5 +325,115 @@ tags:
         assert_eq!(metadata.data_source_id, 63);
         assert_eq!(metadata.options.parameters.len(), 1);
         assert_eq!(metadata.options.parameters[0].name, "project");
+    }
+
+    #[test]
+    fn test_datasource_deserialization() {
+        let json = r#"{
+            "id": 63,
+            "name": "Test DB",
+            "type": "bigquery",
+            "description": null,
+            "syntax": "sql",
+            "paused": 0,
+            "pause_reason": null,
+            "view_only": false,
+            "queue_name": "queries",
+            "scheduled_queue_name": "scheduled_queries",
+            "groups": {},
+            "options": {}
+        }"#;
+
+        let ds: DataSource = serde_json::from_str(json).unwrap();
+        assert_eq!(ds.id, 63);
+        assert_eq!(ds.name, "Test DB");
+        assert_eq!(ds.ds_type, "bigquery");
+        assert_eq!(ds.syntax, Some("sql".to_string()));
+        assert_eq!(ds.description, None);
+        assert_eq!(ds.paused, 0);
+        assert!(!ds.view_only);
+        assert_eq!(ds.queue_name, Some("queries".to_string()));
+    }
+
+    #[test]
+    fn test_datasource_with_nulls() {
+        let json = r#"{
+            "id": 10,
+            "name": "Minimal DB",
+            "type": "pg",
+            "description": "Test description",
+            "syntax": null,
+            "paused": 1,
+            "pause_reason": "Maintenance",
+            "view_only": true,
+            "queue_name": null,
+            "scheduled_queue_name": null,
+            "groups": null,
+            "options": null
+        }"#;
+
+        let ds: DataSource = serde_json::from_str(json).unwrap();
+        assert_eq!(ds.id, 10);
+        assert_eq!(ds.name, "Minimal DB");
+        assert_eq!(ds.ds_type, "pg");
+        assert_eq!(ds.description, Some("Test description".to_string()));
+        assert_eq!(ds.syntax, None);
+        assert_eq!(ds.paused, 1);
+        assert_eq!(ds.pause_reason, Some("Maintenance".to_string()));
+        assert!(ds.view_only);
+        assert_eq!(ds.queue_name, None);
+    }
+
+    #[test]
+    fn test_datasource_schema_deserialization() {
+        let json = r#"{
+            "schema": [
+                {"name": "table1", "columns": ["col1", "col2"]},
+                {"name": "table2", "columns": ["id"]}
+            ]
+        }"#;
+
+        let schema: DataSourceSchema = serde_json::from_str(json).unwrap();
+        assert_eq!(schema.schema.len(), 2);
+        assert_eq!(schema.schema[0].name, "table1");
+        assert_eq!(schema.schema[0].columns, vec!["col1", "col2"]);
+        assert_eq!(schema.schema[1].name, "table2");
+        assert_eq!(schema.schema[1].columns, vec!["id"]);
+    }
+
+    #[test]
+    fn test_schema_table_structure() {
+        let json = r#"{"name": "users", "columns": ["id", "name", "email"]}"#;
+
+        let table: SchemaTable = serde_json::from_str(json).unwrap();
+        assert_eq!(table.name, "users");
+        assert_eq!(table.columns.len(), 3);
+        assert_eq!(table.columns[0], "id");
+        assert_eq!(table.columns[1], "name");
+        assert_eq!(table.columns[2], "email");
+    }
+
+    #[test]
+    fn test_datasource_serialization() {
+        let ds = DataSource {
+            id: 123,
+            name: "My DB".to_string(),
+            ds_type: "mysql".to_string(),
+            syntax: Some("sql".to_string()),
+            description: Some("Test".to_string()),
+            paused: 0,
+            pause_reason: None,
+            view_only: false,
+            queue_name: Some("queries".to_string()),
+            scheduled_queue_name: None,
+            groups: None,
+            options: None,
+        };
+
+        let json = serde_json::to_string(&ds).unwrap();
+        assert!(json.contains("\"id\":123"));
+        assert!(json.contains("\"name\":\"My DB\""));
+        assert!(json.contains("\"type\":\"mysql\""));
+        assert!(json.contains("\"syntax\":\"sql\""));
     }
 }

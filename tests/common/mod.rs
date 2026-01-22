@@ -143,3 +143,100 @@ pub fn mock_list_my_queries(page: u32, page_size: u32, total_count: u64) -> Mock
             })
         ))
 }
+
+pub fn mock_list_data_sources() -> Mock {
+    Mock::given(method("GET"))
+        .and(path("/api/data_sources"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!([
+                {
+                    "id": 63,
+                    "name": "Telemetry (BigQuery)",
+                    "type": "bigquery",
+                    "description": null,
+                    "syntax": "sql",
+                    "paused": 0,
+                    "pause_reason": null,
+                    "view_only": false,
+                    "queue_name": "bq_queries",
+                    "scheduled_queue_name": "bq_scheduled_queries",
+                    "groups": {"2": false},
+                    "options": {}
+                },
+                {
+                    "id": 10,
+                    "name": "Redash metadata",
+                    "type": "pg",
+                    "description": null,
+                    "syntax": "sql",
+                    "paused": 0,
+                    "pause_reason": null,
+                    "view_only": false,
+                    "queue_name": "queries",
+                    "scheduled_queue_name": "scheduled_queries",
+                    "groups": {"2": false},
+                    "options": {}
+                }
+            ])
+        ))
+}
+
+pub fn mock_list_data_sources_empty() -> Mock {
+    Mock::given(method("GET"))
+        .and(path("/api/data_sources"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!([])
+        ))
+}
+
+pub fn mock_get_data_source(data_source_id: u64) -> Mock {
+    Mock::given(method("GET"))
+        .and(path(format!("/api/data_sources/{data_source_id}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({
+                "id": data_source_id,
+                "name": "Test Data Source",
+                "type": "bigquery",
+                "description": "Test description",
+                "syntax": "sql",
+                "paused": 0,
+                "pause_reason": null,
+                "view_only": false,
+                "queue_name": "queries",
+                "scheduled_queue_name": "scheduled_queries",
+                "groups": {},
+                "options": {}
+            })
+        ))
+}
+
+pub fn mock_get_data_source_not_found(data_source_id: u64) -> Mock {
+    Mock::given(method("GET"))
+        .and(path(format!("/api/data_sources/{data_source_id}")))
+        .respond_with(ResponseTemplate::new(404))
+}
+
+pub fn mock_get_data_source_schema(data_source_id: u64) -> Mock {
+    Mock::given(method("GET"))
+        .and(path(format!("/api/data_sources/{data_source_id}/schema")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({
+                "schema": [
+                    {
+                        "name": "table1",
+                        "columns": ["col1", "col2", "col3"]
+                    },
+                    {
+                        "name": "table2",
+                        "columns": ["id", "name"]
+                    }
+                ]
+            })
+        ))
+}
+
+pub fn mock_get_data_source_schema_unauthorized(data_source_id: u64) -> Mock {
+    Mock::given(method("GET"))
+        .and(path(format!("/api/data_sources/{data_source_id}/schema")))
+        .respond_with(ResponseTemplate::new(403))
+}

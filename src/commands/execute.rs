@@ -7,6 +7,7 @@ use std::fs;
 use std::path::Path;
 use crate::api::RedashClient;
 use crate::models::{QueryMetadata, Parameter};
+use super::OutputFormat;
 
 fn parse_parameter_arg(arg: &str) -> Result<(String, serde_json::Value)> {
     let parts: Vec<&str> = arg.splitn(2, '=').collect();
@@ -278,24 +279,6 @@ pub async fn execute(
     }
 
     Ok(())
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum OutputFormat {
-    Json,
-    Table,
-}
-
-impl std::str::FromStr for OutputFormat {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self> {
-        match s.to_lowercase().as_str() {
-            "json" => Ok(Self::Json),
-            "table" => Ok(Self::Table),
-            _ => bail!("Invalid format. Use: json or table"),
-        }
-    }
 }
 
 #[cfg(test)]

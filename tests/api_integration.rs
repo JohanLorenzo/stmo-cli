@@ -214,3 +214,100 @@ async fn test_list_my_queries_pagination() {
     assert_eq!(response.page, 1);
     assert_eq!(response.page_size, 100);
 }
+
+#[tokio::test]
+async fn test_list_data_sources_success() {
+    let mock_server = MockServer::start().await;
+
+    mock_list_data_sources()
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    let data_sources = client.list_data_sources().await.unwrap();
+
+    assert_eq!(data_sources.len(), 2);
+    assert_eq!(data_sources[0].id, 63);
+    assert_eq!(data_sources[0].name, "Telemetry (BigQuery)");
+    assert_eq!(data_sources[0].ds_type, "bigquery");
+    assert_eq!(data_sources[1].id, 10);
+    assert_eq!(data_sources[1].name, "Redash metadata");
+    assert_eq!(data_sources[1].ds_type, "pg");
+}
+
+#[tokio::test]
+async fn test_list_data_sources_empty() {
+    let mock_server = MockServer::start().await;
+
+    mock_list_data_sources_empty()
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    let data_sources = client.list_data_sources().await.unwrap();
+
+    assert_eq!(data_sources.len(), 0);
+}
+
+#[tokio::test]
+async fn test_get_data_source_success() {
+    let mock_server = MockServer::start().await;
+
+    mock_get_data_source(63)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    let data_source = client.get_data_source(63).await.unwrap();
+
+    assert_eq!(data_source.id, 63);
+    assert_eq!(data_source.name, "Test Data Source");
+    assert_eq!(data_source.ds_type, "bigquery");
+    assert_eq!(data_source.description, Some("Test description".to_string()));
+}
+
+#[tokio::test]
+async fn test_get_data_source_not_found() {
+    let mock_server = MockServer::start().await;
+
+    mock_get_data_source_not_found(999)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    let result = client.get_data_source(999).await;
+
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_get_data_source_schema_success() {
+    let mock_server = MockServer::start().await;
+
+    mock_get_data_source_schema(63)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    let schema = client.get_data_source_schema(63, false).await.unwrap();
+
+    assert_eq!(schema.schema.len(), 2);
+    assert_eq!(schema.schema[0].name, "table1");
+    assert_eq!(schema.schema[0].columns, vec!["col1", "col2", "col3"]);
+    assert_eq!(schema.schema[1].name, "table2");
+    assert_eq!(schema.schema[1].columns, vec!["id", "name"]);
+}
+
+#[tokio::test]
+async fn test_get_data_source_schema_unauthorized() {
+    let mock_server = MockServer::start().await;
+
+    mock_get_data_source_schema_unauthorized(63)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    let result = client.get_data_source_schema(63, false).await;
+
+    assert!(result.is_err());
+}

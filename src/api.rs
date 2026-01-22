@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result};
 use reqwest::{Client, header};
-use crate::models::{CreateQuery, QueriesResponse, Query};
+use crate::models::{CreateQuery, DataSource, DataSourceSchema, QueriesResponse, Query};
 
 pub struct RedashClient {
     client: Client,
@@ -61,6 +61,62 @@ impl RedashClient {
             .context("Failed to parse query response")
     }
 
+    pub async fn list_data_sources(&self) -> Result<Vec<DataSource>> {
+        let url = format!("{}/api/data_sources", self.base_url);
+        let response = self.client
+            .get(&url)
+            .send()
+            .await
+            .context("Failed to fetch data sources")?
+            .error_for_status()
+            .context("API returned error status")?;
+
+        response
+            .json()
+            .await
+            .context("Failed to parse data sources response")
+    }
+
+    pub async fn get_data_source(&self, data_source_id: u64) -> Result<DataSource> {
+        let url = format!("{}/api/data_sources/{data_source_id}", self.base_url);
+        let response = self.client
+            .get(&url)
+            .send()
+            .await
+            .context(format!("Failed to fetch data source {data_source_id}"))?
+            .error_for_status()
+            .context("API returned error status")?;
+
+        response
+            .json()
+            .await
+            .context("Failed to parse data source response")
+    }
+
+    pub async fn get_data_source_schema(
+        &self,
+        data_source_id: u64,
+        refresh: bool,
+    ) -> Result<DataSourceSchema> {
+        let url = if refresh {
+            format!("{}/api/data_sources/{data_source_id}/schema?refresh=true", self.base_url)
+        } else {
+            format!("{}/api/data_sources/{data_source_id}/schema", self.base_url)
+        };
+
+        let response = self.client
+            .get(&url)
+            .send()
+            .await
+            .context(format!("Failed to fetch schema for data source {data_source_id}"))?
+            .error_for_status()
+            .context("API returned error status")?;
+
+        response
+            .json()
+            .await
+            .context("Failed to parse schema response")
+    }
 
     pub async fn create_query(&self, create_query: &CreateQuery) -> Result<Query> {
         let url = format!("{}/api/queries", self.base_url);

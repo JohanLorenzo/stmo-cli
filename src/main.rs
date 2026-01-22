@@ -58,6 +58,18 @@ enum Commands {
         #[arg(long, help = "Limit number of rows displayed (default: 100)")]
         limit: Option<usize>,
     },
+
+    #[command(about = "List and explore data sources")]
+    DataSources {
+        #[arg(help = "Optional: Data source ID to inspect")]
+        data_source_id: Option<u64>,
+
+        #[arg(long, help = "Show table schema for the data source")]
+        schema: bool,
+
+        #[arg(long, short = 'f', default_value = "json", help = "Output format: json or table")]
+        format: String,
+    },
 }
 
 #[tokio::main]
@@ -78,7 +90,7 @@ async fn main() -> Result<()> {
         Commands::Fetch { query_ids, all } => commands::fetch::fetch(&client, query_ids, all).await?,
         Commands::Deploy { query_ids, all } => commands::deploy::deploy(&client, query_ids, all).await?,
         Commands::Execute { query_id, param, format, interactive, timeout, limit } => {
-            let output_format = format.parse::<commands::execute::OutputFormat>()
+            let output_format = format.parse::<commands::OutputFormat>()
                 .context("Invalid output format")?;
             let limit_rows = limit.or(Some(100));
             commands::execute::execute(
@@ -90,6 +102,16 @@ async fn main() -> Result<()> {
                 timeout,
                 limit_rows,
             ).await?;
+        }
+        Commands::DataSources { data_source_id, schema, format } => {
+            let output_format = format.parse::<commands::OutputFormat>()
+                .context("Invalid output format")?;
+
+            if let Some(id) = data_source_id {
+                commands::datasources::show_data_source(&client, id, schema, output_format).await?;
+            } else {
+                commands::datasources::list_data_sources(&client, output_format).await?;
+            }
         }
     }
 
