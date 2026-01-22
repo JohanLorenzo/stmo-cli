@@ -293,9 +293,13 @@ async fn test_get_data_source_schema_success() {
 
     assert_eq!(schema.schema.len(), 2);
     assert_eq!(schema.schema[0].name, "table1");
-    assert_eq!(schema.schema[0].columns, vec!["col1", "col2", "col3"]);
+    assert_eq!(schema.schema[0].columns.len(), 3);
+    assert_eq!(schema.schema[0].columns[0].name, "col1");
+    assert_eq!(schema.schema[0].columns[0].column_type, "STRING");
     assert_eq!(schema.schema[1].name, "table2");
-    assert_eq!(schema.schema[1].columns, vec!["id", "name"]);
+    assert_eq!(schema.schema[1].columns.len(), 2);
+    assert_eq!(schema.schema[1].columns[0].name, "id");
+    assert_eq!(schema.schema[1].columns[0].column_type, "INTEGER");
 }
 
 #[tokio::test]

@@ -57,12 +57,19 @@ pub async fn show_data_source(
     client: &RedashClient,
     data_source_id: u64,
     show_schema: bool,
+    refresh_schema: bool,
     format: OutputFormat,
 ) -> Result<()> {
     let ds = client.get_data_source(data_source_id).await?;
 
     let schema = if show_schema {
-        client.get_data_source_schema(data_source_id, false).await.ok()
+        match client.get_data_source_schema(data_source_id, refresh_schema).await {
+            Ok(s) => Some(s),
+            Err(e) => {
+                eprintln!("Error fetching schema: {e:#}");
+                None
+            }
+        }
     } else {
         None
     };
@@ -109,15 +116,18 @@ pub async fn show_data_source(
             if show_schema {
                 if let Some(schema) = schema {
                     println!("\n=== SCHEMA ({} tables) ===\n", schema.schema.len());
-                    println!("{:<50} Columns", "Table Name");
-                    println!("{}", "-".repeat(80));
 
                     for table in &schema.schema {
-                        println!("{:<50} {}", table.name, table.columns.len());
+                        println!("\nTable: {} ({} columns)", table.name, table.columns.len());
+                        println!("  {:<40} Type", "Column");
+                        println!("  {}", "-".repeat(60));
+
+                        for column in &table.columns {
+                            println!("  {:<40} {}", column.name, column.column_type);
+                        }
                     }
                 } else {
-                    eprintln!("\nWarning: Could not fetch schema.");
-                    eprintln!("This may require additional permissions or the data source may not support schema introspection.");
+                    eprintln!("\nNote: Schema could not be fetched. See error above for details.");
                 }
             } else {
                 println!("\nUse --schema flag to view table schema.");

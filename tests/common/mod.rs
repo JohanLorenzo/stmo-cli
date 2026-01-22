@@ -224,11 +224,18 @@ pub fn mock_get_data_source_schema(data_source_id: u64) -> Mock {
                 "schema": [
                     {
                         "name": "table1",
-                        "columns": ["col1", "col2", "col3"]
+                        "columns": [
+                            {"name": "col1", "type": "STRING"},
+                            {"name": "col2", "type": "INTEGER"},
+                            {"name": "col3", "type": "BOOLEAN"}
+                        ]
                     },
                     {
                         "name": "table2",
-                        "columns": ["id", "name"]
+                        "columns": [
+                            {"name": "id", "type": "INTEGER"},
+                            {"name": "name", "type": "STRING"}
+                        ]
                     }
                 ]
             })

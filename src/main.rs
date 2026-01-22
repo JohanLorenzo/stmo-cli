@@ -67,6 +67,9 @@ enum Commands {
         #[arg(long, help = "Show table schema for the data source")]
         schema: bool,
 
+        #[arg(long, help = "Force refresh schema from data source (slower but always up-to-date)")]
+        refresh: bool,
+
         #[arg(long, short = 'f', default_value = "json", help = "Output format: json or table")]
         format: String,
     },
@@ -103,12 +106,12 @@ async fn main() -> Result<()> {
                 limit_rows,
             ).await?;
         }
-        Commands::DataSources { data_source_id, schema, format } => {
+        Commands::DataSources { data_source_id, schema, refresh, format } => {
             let output_format = format.parse::<commands::OutputFormat>()
                 .context("Invalid output format")?;
 
             if let Some(id) = data_source_id {
-                commands::datasources::show_data_source(&client, id, schema, output_format).await?;
+                commands::datasources::show_data_source(&client, id, schema, refresh, output_format).await?;
             } else {
                 commands::datasources::list_data_sources(&client, output_format).await?;
             }

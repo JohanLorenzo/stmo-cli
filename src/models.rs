@@ -171,7 +171,14 @@ pub struct DataSourceSchema {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SchemaTable {
     pub name: String,
-    pub columns: Vec<String>,
+    pub columns: Vec<SchemaColumn>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SchemaColumn {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub column_type: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -388,29 +395,50 @@ tags:
     fn test_datasource_schema_deserialization() {
         let json = r#"{
             "schema": [
-                {"name": "table1", "columns": ["col1", "col2"]},
-                {"name": "table2", "columns": ["id"]}
+                {
+                    "name": "table1",
+                    "columns": [
+                        {"name": "col1", "type": "STRING"},
+                        {"name": "col2", "type": "INTEGER"}
+                    ]
+                },
+                {
+                    "name": "table2",
+                    "columns": [{"name": "id", "type": "INTEGER"}]
+                }
             ]
         }"#;
 
         let schema: DataSourceSchema = serde_json::from_str(json).unwrap();
         assert_eq!(schema.schema.len(), 2);
         assert_eq!(schema.schema[0].name, "table1");
-        assert_eq!(schema.schema[0].columns, vec!["col1", "col2"]);
+        assert_eq!(schema.schema[0].columns.len(), 2);
+        assert_eq!(schema.schema[0].columns[0].name, "col1");
+        assert_eq!(schema.schema[0].columns[0].column_type, "STRING");
         assert_eq!(schema.schema[1].name, "table2");
-        assert_eq!(schema.schema[1].columns, vec!["id"]);
+        assert_eq!(schema.schema[1].columns.len(), 1);
     }
 
     #[test]
     fn test_schema_table_structure() {
-        let json = r#"{"name": "users", "columns": ["id", "name", "email"]}"#;
+        let json = r#"{
+            "name": "users",
+            "columns": [
+                {"name": "id", "type": "INTEGER"},
+                {"name": "name", "type": "STRING"},
+                {"name": "email", "type": "STRING"}
+            ]
+        }"#;
 
         let table: SchemaTable = serde_json::from_str(json).unwrap();
         assert_eq!(table.name, "users");
         assert_eq!(table.columns.len(), 3);
-        assert_eq!(table.columns[0], "id");
-        assert_eq!(table.columns[1], "name");
-        assert_eq!(table.columns[2], "email");
+        assert_eq!(table.columns[0].name, "id");
+        assert_eq!(table.columns[0].column_type, "INTEGER");
+        assert_eq!(table.columns[1].name, "name");
+        assert_eq!(table.columns[1].column_type, "STRING");
+        assert_eq!(table.columns[2].name, "email");
+        assert_eq!(table.columns[2].column_type, "STRING");
     }
 
     #[test]
