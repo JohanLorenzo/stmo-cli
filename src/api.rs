@@ -334,4 +334,42 @@ impl RedashClient {
             }
         }
     }
+
+    pub async fn archive_query(&self, query_id: u64) -> Result<Query> {
+        let url = format!("{}/api/queries/{query_id}", self.base_url);
+        let payload = serde_json::json!({"is_archived": true});
+
+        let response = self.client
+            .post(&url)
+            .json(&payload)
+            .send()
+            .await
+            .context(format!("Failed to archive query {query_id}"))?
+            .error_for_status()
+            .context("API returned error status")?;
+
+        response
+            .json()
+            .await
+            .context("Failed to parse archive response")
+    }
+
+    pub async fn unarchive_query(&self, query_id: u64) -> Result<Query> {
+        let url = format!("{}/api/queries/{query_id}", self.base_url);
+        let payload = serde_json::json!({"is_archived": false});
+
+        let response = self.client
+            .post(&url)
+            .json(&payload)
+            .send()
+            .await
+            .context(format!("Failed to unarchive query {query_id}"))?
+            .error_for_status()
+            .context("API returned error status")?;
+
+        response
+            .json()
+            .await
+            .context("Failed to parse unarchive response")
+    }
 }

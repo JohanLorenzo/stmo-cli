@@ -73,6 +73,21 @@ enum Commands {
         #[arg(long, short = 'f', default_value = "json", help = "Output format: json or table")]
         format: String,
     },
+
+    #[command(about = "Archive queries in Redash and remove local files")]
+    Archive {
+        #[arg(help = "Query IDs to archive (e.g., 123 456 789)")]
+        query_ids: Vec<u64>,
+
+        #[arg(long, help = "Remove local files for queries already archived in Redash")]
+        cleanup: bool,
+    },
+
+    #[command(about = "Restore archived queries")]
+    Unarchive {
+        #[arg(help = "Query IDs to unarchive (e.g., 123 456 789)")]
+        query_ids: Vec<u64>,
+    },
 }
 
 #[tokio::main]
@@ -115,6 +130,21 @@ async fn main() -> Result<()> {
             } else {
                 commands::datasources::list_data_sources(&client, output_format).await?;
             }
+        }
+        Commands::Archive { query_ids, cleanup } => {
+            if cleanup {
+                commands::archive::cleanup(&client).await?;
+            } else if !query_ids.is_empty() {
+                commands::archive::archive(&client, query_ids).await?;
+            } else {
+                anyhow::bail!("No query IDs specified. Use specific query IDs or --cleanup flag.\n\nExamples:\n  cargo run -- archive 123 456\n  cargo run -- archive --cleanup");
+            }
+        }
+        Commands::Unarchive { query_ids } => {
+            if query_ids.is_empty() {
+                anyhow::bail!("No query IDs specified. Provide query IDs to unarchive.\n\nExample:\n  cargo run -- unarchive 123 456");
+            }
+            commands::archive::unarchive(&client, query_ids).await?;
         }
     }
 

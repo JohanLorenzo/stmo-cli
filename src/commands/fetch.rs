@@ -79,6 +79,9 @@ pub async fn fetch(client: &RedashClient, query_ids: Vec<u64>, all: bool) -> Res
     };
 
     println!("Fetching {} queries...", queries_to_fetch.len());
+
+    let mut archived_queries = Vec::new();
+
     for query in &queries_to_fetch {
         let slug = slugify(&query.name);
         let filename_base = format!("{}-{}", query.id, slug);
@@ -105,10 +108,26 @@ pub async fn fetch(client: &RedashClient, query_ids: Vec<u64>, all: bool) -> Res
         fs::write(&yaml_path, yaml_content)
             .context(format!("Failed to write {yaml_path}"))?;
 
-        println!("  ✓ {} - {}", query.id, query.name);
+        if query.is_archived {
+            archived_queries.push((query.id, query.name.clone()));
+            println!("  ✓ {} - {} [ARCHIVED]", query.id, query.name);
+        } else {
+            println!("  ✓ {} - {}", query.id, query.name);
+        }
     }
 
     println!("\n✓ All resources fetched successfully");
+
+    if !archived_queries.is_empty() {
+        println!("\n⚠ Warning: {} archived queries have local files:", archived_queries.len());
+        for (id, name) in &archived_queries {
+            println!("  - {id}: {name}");
+        }
+        let binary_name = std::env::args().next()
+            .and_then(|path| std::path::Path::new(&path).file_name().map(|s| s.to_string_lossy().to_string()))
+            .unwrap_or_else(|| "redash-tool".to_string());
+        println!("\nConsider cleaning up with: {binary_name} archive --cleanup");
+    }
 
     Ok(())
 }

@@ -4,6 +4,7 @@ pub mod fetch;
 pub mod deploy;
 pub mod execute;
 pub mod datasources;
+pub mod archive;
 
 use anyhow::{bail, Result};
 

@@ -247,3 +247,84 @@ pub fn mock_get_data_source_schema_unauthorized(data_source_id: u64) -> Mock {
         .and(path(format!("/api/data_sources/{data_source_id}/schema")))
         .respond_with(ResponseTemplate::new(403))
 }
+
+pub fn mock_get_query(query_id: u64, name: &str, is_archived: bool) -> Mock {
+    Mock::given(method("GET"))
+        .and(path(format!("/api/queries/{query_id}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({
+                "id": query_id,
+                "name": name,
+                "description": null,
+                "query": "SELECT 1",
+                "data_source_id": 63,
+                "user": null,
+                "schedule": null,
+                "options": {"parameters": []},
+                "visualizations": [],
+                "tags": null,
+                "is_archived": is_archived,
+                "is_draft": false,
+                "updated_at": "2026-01-21T10:00:00",
+                "created_at": "2026-01-21T10:00:00"
+            })
+        ))
+}
+
+pub fn mock_archive_query(query_id: u64, name: &str) -> Mock {
+    Mock::given(method("POST"))
+        .and(path(format!("/api/queries/{query_id}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({
+                "id": query_id,
+                "name": name,
+                "description": null,
+                "query": "SELECT 1",
+                "data_source_id": 63,
+                "user": null,
+                "schedule": null,
+                "options": {"parameters": []},
+                "visualizations": [],
+                "tags": null,
+                "is_archived": true,
+                "is_draft": false,
+                "updated_at": "2026-01-21T10:00:00",
+                "created_at": "2026-01-21T10:00:00"
+            })
+        ))
+}
+
+pub fn mock_unarchive_query(query_id: u64, name: &str) -> Mock {
+    Mock::given(method("POST"))
+        .and(path(format!("/api/queries/{query_id}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({
+                "id": query_id,
+                "name": name,
+                "description": null,
+                "query": "SELECT 1",
+                "data_source_id": 63,
+                "user": null,
+                "schedule": null,
+                "options": {"parameters": []},
+                "visualizations": [],
+                "tags": null,
+                "is_archived": false,
+                "is_draft": false,
+                "updated_at": "2026-01-21T10:00:00",
+                "created_at": "2026-01-21T10:00:00"
+            })
+        ))
+}
+
+pub fn mock_archive_query_not_found(query_id: u64) -> Mock {
+    Mock::given(method("POST"))
+        .and(path(format!("/api/queries/{query_id}")))
+        .respond_with(ResponseTemplate::new(404))
+}
+
+pub fn mock_unarchive_query_forbidden(query_id: u64) -> Mock {
+    Mock::given(method("POST"))
+        .and(path(format!("/api/queries/{query_id}")))
+        .respond_with(ResponseTemplate::new(403))
+}

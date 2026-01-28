@@ -315,3 +315,95 @@ async fn test_get_data_source_schema_unauthorized() {
 
     assert!(result.is_err());
 }
+
+#[tokio::test]
+async fn test_archive_query_success() {
+    let mock_server = MockServer::start().await;
+
+    mock_archive_query(123, "Test Query")
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    let query = client.archive_query(123).await.unwrap();
+
+    assert_eq!(query.id, 123);
+    assert_eq!(query.name, "Test Query");
+    assert!(query.is_archived);
+}
+
+#[tokio::test]
+async fn test_archive_query_not_found() {
+    let mock_server = MockServer::start().await;
+
+    mock_archive_query_not_found(999)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    let result = client.archive_query(999).await;
+
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_unarchive_query_success() {
+    let mock_server = MockServer::start().await;
+
+    mock_unarchive_query(123, "Test Query")
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    let query = client.unarchive_query(123).await.unwrap();
+
+    assert_eq!(query.id, 123);
+    assert_eq!(query.name, "Test Query");
+    assert!(!query.is_archived);
+}
+
+#[tokio::test]
+async fn test_unarchive_query_forbidden() {
+    let mock_server = MockServer::start().await;
+
+    mock_unarchive_query_forbidden(123)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    let result = client.unarchive_query(123).await;
+
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_get_query_archived() {
+    let mock_server = MockServer::start().await;
+
+    mock_get_query(123, "Archived Query", true)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    let query = client.get_query(123).await.unwrap();
+
+    assert_eq!(query.id, 123);
+    assert_eq!(query.name, "Archived Query");
+    assert!(query.is_archived);
+}
+
+#[tokio::test]
+async fn test_get_query_not_archived() {
+    let mock_server = MockServer::start().await;
+
+    mock_get_query(123, "Active Query", false)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    let query = client.get_query(123).await.unwrap();
+
+    assert_eq!(query.id, 123);
+    assert_eq!(query.name, "Active Query");
+    assert!(!query.is_archived);
+}

@@ -4,7 +4,7 @@ Rust CLI for version controlling Redash queries and dashboards.
 
 ## Quick Reference
 
-**Commands**: `discover` `init` `fetch` `deploy` `execute` `data-sources`
+**Commands**: `discover` `init` `fetch` `deploy` `execute` `data-sources` `archive` `unarchive`
 **Env Vars**: `REDASH_API_KEY` (required), `REDASH_URL` (optional, defaults to sql.telemetry.mozilla.org)
 
 ## Key Constraints
@@ -31,7 +31,8 @@ src/
     ├── fetch.rs         # Download queries, slugify()
     ├── deploy.rs        # Upload changes
     ├── execute.rs       # Execute queries
-    └── datasources.rs   # List/explore data sources
+    ├── datasources.rs   # List/explore data sources
+    └── archive.rs       # Archive/unarchive queries
 ```
 
 ## Data Models
@@ -48,6 +49,7 @@ src/
 **Visualization**: create_visualization, update_visualization
 **Execution**: refresh_query, poll_job, get_query_result, execute_query_with_polling
 **Data Source**: list_data_sources, get_data_source, get_data_source_schema
+**Archive**: archive_query, unarchive_query
 
 ## Testing
 
