@@ -88,6 +88,44 @@ enum Commands {
         #[arg(help = "Query IDs to unarchive (e.g., 123 456 789)")]
         query_ids: Vec<u64>,
     },
+
+    #[command(about = "Manage dashboards")]
+    Dashboards {
+        #[command(subcommand)]
+        command: DashboardCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum DashboardCommands {
+    #[command(about = "List all dashboards from Redash")]
+    Discover,
+
+    #[command(about = "Fetch dashboards from Redash")]
+    Fetch {
+        #[arg(help = "Dashboard slugs to fetch (e.g., firefox-desktop-on-steamos bug-2006698---ccov-build-regression)")]
+        slugs: Vec<String>,
+    },
+
+    #[command(about = "Deploy dashboard changes to Redash")]
+    Deploy {
+        #[arg(help = "Dashboard slugs to deploy (e.g., firefox-desktop-on-steamos bug-2006698---ccov-build-regression)")]
+        slugs: Vec<String>,
+        #[arg(long, help = "Deploy all tracked dashboards")]
+        all: bool,
+    },
+
+    #[command(about = "Archive dashboards in Redash and remove local files")]
+    Archive {
+        #[arg(help = "Dashboard slugs to archive (e.g., firefox-desktop-on-steamos bug-2006698---ccov-build-regression)")]
+        slugs: Vec<String>,
+    },
+
+    #[command(about = "Restore archived dashboards")]
+    Unarchive {
+        #[arg(help = "Dashboard slugs to unarchive (e.g., firefox-desktop-on-steamos bug-2006698---ccov-build-regression)")]
+        slugs: Vec<String>,
+    },
 }
 
 #[tokio::main]
@@ -146,6 +184,13 @@ async fn main() -> Result<()> {
             }
             commands::archive::unarchive(&client, query_ids).await?;
         }
+        Commands::Dashboards { command } => match command {
+            DashboardCommands::Discover => commands::dashboards::discover(&client).await?,
+            DashboardCommands::Fetch { slugs } => commands::dashboards::fetch(&client, slugs.clone()).await?,
+            DashboardCommands::Deploy { slugs, all } => commands::dashboards::deploy(&client, slugs.clone(), all).await?,
+            DashboardCommands::Archive { slugs } => commands::dashboards::archive(&client, slugs.clone()).await?,
+            DashboardCommands::Unarchive { slugs } => commands::dashboards::unarchive(&client, slugs.clone()).await?,
+        },
     }
 
     Ok(())

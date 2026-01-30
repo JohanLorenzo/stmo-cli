@@ -4,7 +4,7 @@ Rust CLI for version controlling Redash queries and dashboards.
 
 ## Quick Reference
 
-**Commands**: `discover` `init` `fetch` `deploy` `execute` `data-sources` `archive` `unarchive`
+**Commands**: `discover` `init` `fetch` `deploy` `execute` `data-sources` `archive` `unarchive` `dashboards`
 **Env Vars**: `REDASH_API_KEY` (required), `REDASH_URL` (optional, defaults to sql.telemetry.mozilla.org)
 
 ## Key Constraints
@@ -32,14 +32,15 @@ src/
     ├── deploy.rs        # Upload changes
     ├── execute.rs       # Execute queries
     ├── datasources.rs   # List/explore data sources
-    └── archive.rs       # Archive/unarchive queries
+    ├── archive.rs       # Archive/unarchive queries
+    └── dashboards.rs    # Dashboard management
 ```
 
 ## Data Models
 
 **Query**: Full Redash query (id, name, sql, data_source_id, options.parameters, visualizations, schedule, user)
 **QueryMetadata**: YAML variant (excludes user, uses user_id)
-**CreateQuery**: For creating new queries via deploy
+**CreateQuery**: For ID 0 workflow
 **DataSource**: id, name, ds_type, syntax, paused, view_only
 **JobStatus**: Pending=1, Started=2, Success=3, Failure=4, Cancelled=5
 
@@ -70,6 +71,8 @@ fn test_something() {
     // Use temp_dir.path() for all file operations
 }
 ```
+
+For integration tests needing current directory context, use mutex + TempWorkDir pattern (see `tests/dashboard_commands.rs`).
 
 ### API Error Handling
 Don't use `.error_for_status()` - it discards the response body. Instead:

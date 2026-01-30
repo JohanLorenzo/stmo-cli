@@ -42,9 +42,9 @@ redash-tool init
 redash-tool discover
 ```
 
-5. Fetch all queries and dashboards:
+5. Fetch specific queries:
 ```bash
-redash-tool fetch
+redash-tool fetch 123 456 789
 ```
 
 ## Usage
@@ -52,14 +52,14 @@ redash-tool fetch
 ### Fetch Queries from Redash
 
 ```bash
-redash-tool fetch    # Fetch all tracked queries and dashboards
-redash-tool discover  # List available queries
+redash-tool fetch --all        # Fetch all tracked queries
+redash-tool fetch 123 456 789  # Fetch specific queries
+redash-tool discover            # List available queries
 ```
 
 This creates/updates:
 - `queries/{id}-{slug}.sql` - Query SQL
 - `queries/{id}-{slug}.yaml` - Query metadata (parameters, visualizations, etc.)
-- `dashboards/{id}-{slug}.yaml` - Dashboard metadata
 
 ### Deploy to Redash
 

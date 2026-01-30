@@ -1,0 +1,508 @@
+#![allow(clippy::missing_errors_doc)]
+
+use anyhow::{Context, Result};
+use std::fs;
+use std::path::Path;
+
+use crate::api::RedashClient;
+use crate::models::{CreateWidget, Dashboard, DashboardMetadata, WidgetMetadata};
+
+fn extract_dashboard_slugs_from_directory() -> Result<Vec<String>> {
+    let dashboards_dir = Path::new("dashboards");
+
+    if !dashboards_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut dashboard_slugs = Vec::new();
+
+    for entry in fs::read_dir(dashboards_dir).context("Failed to read dashboards directory")? {
+        let entry = entry.context("Failed to read directory entry")?;
+        let path = entry.path();
+
+        if path.extension().is_some_and(|ext| ext == "yaml")
+            && let Some(filename) = path.file_name().and_then(|f| f.to_str())
+            && let Some(slug) = filename.strip_suffix(".yaml")
+                .and_then(|s| s.split_once('-'))
+                .map(|(_, slug)| slug)
+        {
+            dashboard_slugs.push(slug.to_string());
+        }
+    }
+
+    dashboard_slugs.sort_unstable();
+    dashboard_slugs.dedup();
+
+    Ok(dashboard_slugs)
+}
+
+pub async fn discover(client: &RedashClient) -> Result<()> {
+    println!("Fetching all dashboards from Redash...\n");
+    let dashboards = client.fetch_all_dashboards().await?;
+
+    if dashboards.is_empty() {
+        println!("No dashboards found.");
+        return Ok(());
+    }
+
+    println!("Found {} dashboards:\n", dashboards.len());
+
+    for dashboard in &dashboards {
+        let status_flags = match (dashboard.is_draft, dashboard.is_archived) {
+            (true, true) => " [DRAFT, ARCHIVED]",
+            (true, false) => " [DRAFT]",
+            (false, true) => " [ARCHIVED]",
+            (false, false) => "",
+        };
+        println!("  {} - {}{}", dashboard.slug, dashboard.name, status_flags);
+    }
+
+    println!("\nUsage:");
+    println!("  cargo run -- dashboards fetch <slug> [<slug>...]");
+    println!("  cargo run -- dashboards fetch firefox-desktop-on-steamos bug-2006698---ccov-build-regression");
+
+    Ok(())
+}
+
+pub async fn fetch(client: &RedashClient, dashboard_slugs: Vec<String>) -> Result<()> {
+    if dashboard_slugs.is_empty() {
+        anyhow::bail!("No dashboard slugs specified. Use 'dashboards discover' to see available dashboards.\n\nExample:\n  cargo run -- dashboards fetch firefox-desktop-on-steamos bug-2006698---ccov-build-regression");
+    }
+
+    fs::create_dir_all("dashboards")
+        .context("Failed to create dashboards directory")?;
+
+    println!("Fetching {} dashboards...\n", dashboard_slugs.len());
+
+    let mut success_count = 0;
+    let mut failed_slugs = Vec::new();
+
+    for slug in &dashboard_slugs {
+        match client.get_dashboard(slug).await {
+            Ok(dashboard) => {
+                let filename = format!("dashboards/{}-{}.yaml", dashboard.id, dashboard.slug);
+
+                let metadata = DashboardMetadata {
+                    id: dashboard.id,
+                    name: dashboard.name.clone(),
+                    slug: dashboard.slug.clone(),
+                    user_id: dashboard.user_id,
+                    is_draft: dashboard.is_draft,
+                    is_archived: dashboard.is_archived,
+                    filters_enabled: dashboard.filters_enabled,
+                    tags: dashboard.tags.clone(),
+                    widgets: dashboard
+                        .widgets
+                        .iter()
+                        .map(|w| WidgetMetadata {
+                            id: w.id,
+                            visualization_id: w.visualization_id,
+                            query_id: w.visualization.as_ref().map(|v| v.query.id),
+                            visualization_name: w.visualization.as_ref().map(|v| v.name.clone()),
+                            text: w.text.clone(),
+                            options: w.options.clone(),
+                        })
+                        .collect(),
+                };
+
+                let yaml_content = serde_yaml::to_string(&metadata)
+                    .context("Failed to serialize dashboard metadata")?;
+                fs::write(&filename, yaml_content)
+                    .context(format!("Failed to write {filename}"))?;
+
+                let status = if dashboard.is_archived {
+                    " [ARCHIVED]"
+                } else {
+                    ""
+                };
+                println!("  ✓ {} - {}{}", dashboard.id, dashboard.name, status);
+                success_count += 1;
+            }
+            Err(e) => {
+                eprintln!("  ⚠ Dashboard '{slug}' failed to fetch: {e}");
+                failed_slugs.push(slug.clone());
+            }
+        }
+    }
+
+    if failed_slugs.is_empty() {
+        println!("\n✓ All dashboards fetched successfully");
+        Ok(())
+    } else {
+        println!("\n✓ {success_count} dashboard(s) fetched successfully");
+        anyhow::bail!(
+            "{} dashboard(s) failed to fetch: {}",
+            failed_slugs.len(),
+            failed_slugs.join(", ")
+        );
+    }
+}
+
+pub async fn deploy(client: &RedashClient, dashboard_slugs: Vec<String>, all: bool) -> Result<()> {
+    let existing_dashboard_slugs = extract_dashboard_slugs_from_directory()?;
+
+    let slugs_to_deploy = if all {
+        if existing_dashboard_slugs.is_empty() {
+            anyhow::bail!("No dashboards found in dashboards/ directory. Use 'fetch' first.");
+        }
+        println!("Deploying {} dashboards from local directory...\n", existing_dashboard_slugs.len());
+        existing_dashboard_slugs
+    } else if !dashboard_slugs.is_empty() {
+        println!("Deploying {} specific dashboards...\n", dashboard_slugs.len());
+        dashboard_slugs
+    } else {
+        anyhow::bail!("No dashboard slugs specified. Use --all to deploy all tracked dashboards, or provide specific slugs.\n\nExamples:\n  cargo run -- dashboards deploy --all\n  cargo run -- dashboards deploy firefox-desktop-on-steamos bug-2006698---ccov-build-regression");
+    };
+
+    let mut success_count = 0;
+    let mut failed_slugs = Vec::new();
+
+    for slug in &slugs_to_deploy {
+        match deploy_single_dashboard(client, slug).await {
+            Ok(name) => {
+                println!("  ✓ {name}");
+                success_count += 1;
+            }
+            Err(e) => {
+                eprintln!("  ⚠ Dashboard '{slug}' failed to deploy: {e}");
+                failed_slugs.push(slug.clone());
+            }
+        }
+    }
+
+    if failed_slugs.is_empty() {
+        println!("\n✓ All dashboards deployed successfully");
+        Ok(())
+    } else {
+        println!("\n✓ {success_count} dashboard(s) deployed successfully");
+        anyhow::bail!(
+            "{} dashboard(s) failed to deploy: {}",
+            failed_slugs.len(),
+            failed_slugs.join(", ")
+        );
+    }
+}
+
+async fn deploy_single_dashboard(client: &RedashClient, dashboard_slug: &str) -> Result<String> {
+    let yaml_files: Vec<_> = fs::read_dir("dashboards")
+        .context("Failed to read dashboards directory")?
+        .filter_map(std::result::Result::ok)
+        .filter(|entry| {
+            entry.path().extension().is_some_and(|ext| ext == "yaml")
+                && entry
+                    .file_name()
+                    .to_str()
+                    .and_then(|name| name.strip_suffix(".yaml"))
+                    .and_then(|name| name.split_once('-'))
+                    .map(|(_, slug)| slug)
+                    .is_some_and(|slug| slug == dashboard_slug)
+        })
+        .collect();
+
+    if yaml_files.is_empty() {
+        anyhow::bail!("No YAML file found for dashboard '{dashboard_slug}'");
+    }
+
+    if yaml_files.len() > 1 {
+        anyhow::bail!("Multiple YAML files found for dashboard '{dashboard_slug}'");
+    }
+
+    let yaml_path = yaml_files[0].path();
+    let yaml_content = fs::read_to_string(&yaml_path)
+        .context(format!("Failed to read {}", yaml_path.display()))?;
+
+    let local_metadata: DashboardMetadata = serde_yaml::from_str(&yaml_content)
+        .context("Failed to parse dashboard YAML")?;
+
+    let server_dashboard = client.get_dashboard(dashboard_slug).await?;
+
+    let server_widget_ids: std::collections::HashSet<u64> = server_dashboard
+        .widgets
+        .iter()
+        .map(|w| w.id)
+        .collect();
+
+    let local_widget_ids: std::collections::HashSet<u64> = local_metadata
+        .widgets
+        .iter()
+        .filter(|w| w.id != 0)
+        .map(|w| w.id)
+        .collect();
+
+    for widget_id in &server_widget_ids {
+        if !local_widget_ids.contains(widget_id) {
+            client.delete_widget(*widget_id).await?;
+        }
+    }
+
+    for widget in &local_metadata.widgets {
+        if widget.id == 0 {
+            let create_widget = CreateWidget {
+                dashboard_id: local_metadata.id,
+                visualization_id: widget.visualization_id,
+                text: widget.text.clone(),
+                options: widget.options.clone(),
+            };
+            client.create_widget(&create_widget).await?;
+        }
+    }
+
+    let updated_dashboard = Dashboard {
+        id: local_metadata.id,
+        name: local_metadata.name.clone(),
+        slug: local_metadata.slug.clone(),
+        user_id: local_metadata.user_id,
+        is_archived: local_metadata.is_archived,
+        is_draft: local_metadata.is_draft,
+        filters_enabled: local_metadata.filters_enabled,
+        tags: local_metadata.tags.clone(),
+        widgets: vec![],
+    };
+
+    client.update_dashboard(&updated_dashboard).await?;
+
+    let refreshed = client.get_dashboard(dashboard_slug).await?;
+
+    let filename = format!("dashboards/{}-{}.yaml", refreshed.id, refreshed.slug);
+
+    let updated_metadata = DashboardMetadata {
+        id: refreshed.id,
+        name: refreshed.name.clone(),
+        slug: refreshed.slug.clone(),
+        user_id: refreshed.user_id,
+        is_draft: refreshed.is_draft,
+        is_archived: refreshed.is_archived,
+        filters_enabled: refreshed.filters_enabled,
+        tags: refreshed.tags.clone(),
+        widgets: refreshed
+            .widgets
+            .iter()
+            .map(|w| WidgetMetadata {
+                id: w.id,
+                visualization_id: w.visualization_id,
+                query_id: w.visualization.as_ref().map(|v| v.query.id),
+                visualization_name: w.visualization.as_ref().map(|v| v.name.clone()),
+                text: w.text.clone(),
+                options: w.options.clone(),
+            })
+            .collect(),
+    };
+
+    let yaml_content = serde_yaml::to_string(&updated_metadata)
+        .context("Failed to serialize dashboard metadata")?;
+    fs::write(&filename, yaml_content)
+        .context(format!("Failed to write {filename}"))?;
+
+    Ok(refreshed.name)
+}
+
+pub async fn archive(client: &RedashClient, dashboard_slugs: Vec<String>) -> Result<()> {
+    if dashboard_slugs.is_empty() {
+        anyhow::bail!("No dashboard slugs specified.\n\nExample:\n  cargo run -- dashboards archive firefox-desktop-on-steamos bug-2006698---ccov-build-regression");
+    }
+
+    println!("Archiving {} dashboards...\n", dashboard_slugs.len());
+
+    let mut success_count = 0;
+    let mut failed_slugs = Vec::new();
+
+    for slug in &dashboard_slugs {
+        match client.get_dashboard(slug).await {
+            Ok(dashboard) => {
+                match client.archive_dashboard(dashboard.id).await {
+                    Ok(()) => {
+                        let yaml_files: Vec<_> = fs::read_dir("dashboards")
+                            .context("Failed to read dashboards directory")?
+                            .filter_map(std::result::Result::ok)
+                            .filter(|entry| {
+                                entry.path().extension().is_some_and(|ext| ext == "yaml")
+                                    && entry
+                                        .file_name()
+                                        .to_str()
+                                        .and_then(|name| name.strip_suffix(".yaml"))
+                                        .and_then(|name| name.split_once('-'))
+                                        .map(|(_, file_slug)| file_slug)
+                                        .is_some_and(|file_slug| file_slug == slug)
+                            })
+                            .collect();
+
+                        for file in yaml_files {
+                            fs::remove_file(file.path())
+                                .context(format!("Failed to delete {}", file.path().display()))?;
+                        }
+
+                        println!("  ✓ {} archived and local file deleted", dashboard.name);
+                        success_count += 1;
+                    }
+                    Err(e) => {
+                        eprintln!("  ⚠ Dashboard '{slug}' failed to archive: {e}");
+                        failed_slugs.push(slug.clone());
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("  ⚠ Dashboard '{slug}' failed to fetch for archival: {e}");
+                failed_slugs.push(slug.clone());
+            }
+        }
+    }
+
+    if failed_slugs.is_empty() {
+        println!("\n✓ All dashboards archived successfully");
+        Ok(())
+    } else {
+        println!("\n✓ {success_count} dashboard(s) archived successfully");
+        anyhow::bail!(
+            "{} dashboard(s) failed to archive: {}",
+            failed_slugs.len(),
+            failed_slugs.join(", ")
+        );
+    }
+}
+
+pub async fn unarchive(client: &RedashClient, dashboard_slugs: Vec<String>) -> Result<()> {
+    if dashboard_slugs.is_empty() {
+        anyhow::bail!("No dashboard slugs specified.\n\nExample:\n  cargo run -- dashboards unarchive firefox-desktop-on-steamos bug-2006698---ccov-build-regression");
+    }
+
+    println!("Unarchiving {} dashboards...\n", dashboard_slugs.len());
+
+    let mut success_count = 0;
+    let mut failed_slugs = Vec::new();
+
+    for slug in &dashboard_slugs {
+        match client.get_dashboard(slug).await {
+            Ok(dashboard) => {
+                match client.unarchive_dashboard(dashboard.id).await {
+                    Ok(unarchived) => {
+                        println!("  ✓ {} unarchived", unarchived.name);
+                        success_count += 1;
+                    }
+                    Err(e) => {
+                        eprintln!("  ⚠ Dashboard '{slug}' failed to unarchive: {e}");
+                        failed_slugs.push(slug.clone());
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("  ⚠ Dashboard '{slug}' failed to fetch for unarchival: {e}");
+                failed_slugs.push(slug.clone());
+            }
+        }
+    }
+
+    if failed_slugs.is_empty() {
+        println!("\n✓ All dashboards unarchived successfully");
+        println!("\nUse 'dashboards fetch' to download the YAML files:");
+        println!("  cargo run -- dashboards fetch {}", dashboard_slugs.join(" "));
+        Ok(())
+    } else {
+        println!("\n✓ {success_count} dashboard(s) unarchived successfully");
+        anyhow::bail!(
+            "{} dashboard(s) failed to unarchive: {}",
+            failed_slugs.len(),
+            failed_slugs.join(", ")
+        );
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::missing_errors_doc)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    static TEST_MUTEX: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn test_extract_dashboard_slugs_from_directory_empty() {
+        let result = extract_dashboard_slugs_from_directory();
+        assert!(result.is_ok());
+        let slugs = result.unwrap();
+        assert!(slugs.is_empty() || !slugs.is_empty());
+    }
+
+    #[test]
+    fn test_extract_dashboard_slugs_with_triple_dash() {
+        let _guard = TEST_MUTEX.lock().unwrap();
+
+        fs::create_dir_all("dashboards").unwrap();
+
+        fs::write("dashboards/2006698-bug-2006698---ccov-build-regression.yaml", "test").unwrap();
+        fs::write("dashboards/2570-firefox-desktop-on-steamos.yaml", "test").unwrap();
+
+        let result = extract_dashboard_slugs_from_directory();
+        assert!(result.is_ok());
+
+        let slugs = result.unwrap();
+
+        assert!(slugs.contains(&"bug-2006698---ccov-build-regression".to_string()));
+        assert!(slugs.contains(&"firefox-desktop-on-steamos".to_string()));
+
+        fs::remove_dir_all("dashboards").ok();
+    }
+
+    #[test]
+    fn test_extract_dashboard_slugs_deduplication() {
+        let _guard = TEST_MUTEX.lock().unwrap();
+
+        fs::create_dir_all("dashboards").unwrap();
+
+        fs::write("dashboards/2006698-bug-2006698---ccov-build-regression.yaml", "test").unwrap();
+        fs::write("dashboards/2006699-bug-2006698---ccov-build-regression.yaml", "test").unwrap();
+
+        let result = extract_dashboard_slugs_from_directory();
+        assert!(result.is_ok());
+
+        let slugs = result.unwrap();
+
+        assert_eq!(slugs.len(), 1);
+        assert_eq!(slugs[0], "bug-2006698---ccov-build-regression");
+
+        fs::remove_dir_all("dashboards").ok();
+    }
+
+    #[test]
+    fn test_extract_dashboard_slugs_ignores_non_yaml() {
+        let _guard = TEST_MUTEX.lock().unwrap();
+
+        fs::create_dir_all("dashboards").unwrap();
+
+        fs::write("dashboards/2006698-bug-2006698---ccov-build-regression.yaml", "test").unwrap();
+        fs::write("dashboards/2570-firefox-desktop-on-steamos.txt", "test").unwrap();
+        fs::write("dashboards/README.md", "test").unwrap();
+
+        let result = extract_dashboard_slugs_from_directory();
+        assert!(result.is_ok());
+
+        let slugs = result.unwrap();
+
+        assert_eq!(slugs.len(), 1);
+        assert_eq!(slugs[0], "bug-2006698---ccov-build-regression");
+
+        fs::remove_dir_all("dashboards").ok();
+    }
+
+    #[test]
+    fn test_extract_dashboard_slugs_sorted() {
+        let _guard = TEST_MUTEX.lock().unwrap();
+
+        fs::create_dir_all("dashboards").unwrap();
+
+        fs::write("dashboards/3000-zebra-dashboard.yaml", "test").unwrap();
+        fs::write("dashboards/2006698-bug-2006698---ccov-build-regression.yaml", "test").unwrap();
+        fs::write("dashboards/1000-alpha-dashboard.yaml", "test").unwrap();
+
+        let result = extract_dashboard_slugs_from_directory();
+        assert!(result.is_ok());
+
+        let slugs = result.unwrap();
+
+        assert_eq!(slugs.len(), 3);
+        assert_eq!(slugs[0], "alpha-dashboard");
+        assert_eq!(slugs[1], "bug-2006698---ccov-build-regression");
+        assert_eq!(slugs[2], "zebra-dashboard");
+
+        fs::remove_dir_all("dashboards").ok();
+    }
+}

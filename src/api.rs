@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result};
 use reqwest::{Client, header};
-use crate::models::{CreateQuery, DataSource, DataSourceSchema, QueriesResponse, Query};
+use crate::models::{CreateQuery, CreateWidget, Dashboard, DashboardsResponse, DashboardSummary, DataSource, DataSourceSchema, QueriesResponse, Query};
 
 pub struct RedashClient {
     client: Client,
@@ -371,5 +371,163 @@ impl RedashClient {
             .json()
             .await
             .context("Failed to parse unarchive response")
+    }
+
+    pub async fn list_dashboards(&self, page: u32, page_size: u32) -> Result<DashboardsResponse> {
+        let url = format!("{}/api/dashboards?page={page}&page_size={page_size}", self.base_url);
+        let response = self.client
+            .get(&url)
+            .send()
+            .await
+            .context("Failed to fetch dashboards")?;
+
+        let status = response.status();
+        if !status.is_success() {
+            anyhow::bail!("HTTP {}: {}", status.as_u16(), status.canonical_reason().unwrap_or("Unknown error"));
+        }
+
+        response
+            .json()
+            .await
+            .context("Failed to parse dashboards response")
+    }
+
+    pub async fn get_dashboard(&self, slug_or_id: &str) -> Result<Dashboard> {
+        let url = format!("{}/api/dashboards/{slug_or_id}", self.base_url);
+        let response = self.client
+            .get(&url)
+            .send()
+            .await
+            .context(format!("Failed to fetch dashboard {slug_or_id}"))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            anyhow::bail!("HTTP {}: {}", status.as_u16(), status.canonical_reason().unwrap_or("Unknown error"));
+        }
+
+        response
+            .json()
+            .await
+            .context("Failed to parse dashboard response")
+    }
+
+    pub async fn update_dashboard(&self, dashboard: &Dashboard) -> Result<Dashboard> {
+        let url = format!("{}/api/dashboards/{}", self.base_url, dashboard.id);
+        let response = self.client
+            .post(&url)
+            .json(dashboard)
+            .send()
+            .await
+            .context(format!("Failed to update dashboard {}", dashboard.id))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            anyhow::bail!("HTTP {}: {}", status.as_u16(), status.canonical_reason().unwrap_or("Unknown error"));
+        }
+
+        response
+            .json()
+            .await
+            .context("Failed to parse dashboard update response")
+    }
+
+    pub async fn archive_dashboard(&self, dashboard_id: u64) -> Result<()> {
+        let url = format!("{}/api/dashboards/{dashboard_id}", self.base_url);
+        let response = self.client
+            .delete(&url)
+            .send()
+            .await
+            .context(format!("Failed to archive dashboard {dashboard_id}"))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            anyhow::bail!("HTTP {}: {}", status.as_u16(), status.canonical_reason().unwrap_or("Unknown error"));
+        }
+
+        Ok(())
+    }
+
+    pub async fn unarchive_dashboard(&self, dashboard_id: u64) -> Result<Dashboard> {
+        let url = format!("{}/api/dashboards/{dashboard_id}", self.base_url);
+        let payload = serde_json::json!({"is_archived": false});
+
+        let response = self.client
+            .post(&url)
+            .json(&payload)
+            .send()
+            .await
+            .context(format!("Failed to unarchive dashboard {dashboard_id}"))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            anyhow::bail!("HTTP {}: {}", status.as_u16(), status.canonical_reason().unwrap_or("Unknown error"));
+        }
+
+        response
+            .json()
+            .await
+            .context("Failed to parse unarchive response")
+    }
+
+    pub async fn create_widget(&self, widget: &CreateWidget) -> Result<crate::models::Widget> {
+        let url = format!("{}/api/widgets", self.base_url);
+        let response = self.client
+            .post(&url)
+            .json(widget)
+            .send()
+            .await
+            .context("Failed to create widget")?;
+
+        let status = response.status();
+        if !status.is_success() {
+            anyhow::bail!("HTTP {}: {}", status.as_u16(), status.canonical_reason().unwrap_or("Unknown error"));
+        }
+
+        response
+            .json()
+            .await
+            .context("Failed to parse widget create response")
+    }
+
+    pub async fn delete_widget(&self, widget_id: u64) -> Result<()> {
+        let url = format!("{}/api/widgets/{widget_id}", self.base_url);
+        let response = self.client
+            .delete(&url)
+            .send()
+            .await
+            .context(format!("Failed to delete widget {widget_id}"))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            anyhow::bail!("HTTP {}: {}", status.as_u16(), status.canonical_reason().unwrap_or("Unknown error"));
+        }
+
+        Ok(())
+    }
+
+    pub async fn fetch_all_dashboards(&self) -> Result<Vec<DashboardSummary>> {
+        let mut all_dashboards = Vec::new();
+        let mut page = 1;
+        let page_size = 100;
+
+        loop {
+            let response = self.list_dashboards(page, page_size).await?;
+
+            if response.results.is_empty() {
+                break;
+            }
+
+            all_dashboards.extend(response.results);
+            eprintln!("Fetched {} / {} dashboards...", all_dashboards.len(), response.count);
+
+            #[allow(clippy::cast_possible_truncation)]
+            if all_dashboards.len() >= response.count as usize {
+                break;
+            }
+
+            page += 1;
+        }
+
+        Ok(all_dashboards)
     }
 }

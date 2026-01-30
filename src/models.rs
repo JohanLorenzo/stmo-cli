@@ -261,7 +261,8 @@ pub struct Dashboard {
     pub user_id: u64,
     pub is_archived: bool,
     pub is_draft: bool,
-    pub dashboard_filters_enabled: bool,
+    #[serde(rename = "dashboard_filters_enabled")]
+    pub filters_enabled: bool,
     pub tags: Vec<String>,
     pub widgets: Vec<Widget>,
 }
@@ -317,7 +318,8 @@ pub struct DashboardMetadata {
     pub user_id: u64,
     pub is_draft: bool,
     pub is_archived: bool,
-    pub dashboard_filters_enabled: bool,
+    #[serde(rename = "dashboard_filters_enabled")]
+    pub filters_enabled: bool,
     pub tags: Vec<String>,
     pub widgets: Vec<WidgetMetadata>,
 }
@@ -344,6 +346,7 @@ pub struct DashboardsResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct DashboardSummary {
+    #[allow(dead_code)]
     pub id: u64,
     pub name: String,
     #[allow(dead_code)]
@@ -595,7 +598,7 @@ tags:
         assert_eq!(dashboard.user_id, 530);
         assert!(!dashboard.is_archived);
         assert!(!dashboard.is_draft);
-        assert!(dashboard.dashboard_filters_enabled);
+        assert!(dashboard.filters_enabled);
         assert_eq!(dashboard.tags, vec!["tag1", "tag2"]);
         assert_eq!(dashboard.widgets.len(), 0);
     }
@@ -723,7 +726,7 @@ widgets:
         assert_eq!(metadata.user_id, 530);
         assert!(!metadata.is_draft);
         assert!(!metadata.is_archived);
-        assert!(metadata.dashboard_filters_enabled);
+        assert!(metadata.filters_enabled);
         assert_eq!(metadata.tags, vec!["tag1", "tag2"]);
         assert_eq!(metadata.widgets.len(), 1);
         assert_eq!(metadata.widgets[0].id, 75035);

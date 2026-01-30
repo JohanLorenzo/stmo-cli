@@ -1,0 +1,279 @@
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::missing_panics_doc)]
+
+mod common;
+
+use redash_tool::api::RedashClient;
+use common::*;
+use tokio::sync::Mutex;
+use std::sync::OnceLock;
+
+static TEST_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
+
+fn get_test_lock() -> &'static Mutex<()> {
+    TEST_MUTEX.get_or_init(|| Mutex::new(()))
+}
+
+#[tokio::test]
+async fn test_fetch_with_all_failures_returns_error() {
+    let _guard = get_test_lock().lock().await;
+    let mock_server = wiremock::MockServer::start().await;
+
+    mock_get_dashboard_not_found("firefox-desktop-on-steamos")
+        .mount(&mock_server)
+        .await;
+
+    mock_get_dashboard_not_found("test-dashboard")
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+
+    let result = redash_tool::commands::dashboards::fetch(&client, vec!["firefox-desktop-on-steamos".to_string(), "test-dashboard".to_string()]).await;
+
+    if std::path::Path::new("dashboards").exists() {
+        std::fs::remove_dir_all("dashboards").ok();
+    }
+
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(error.to_string().contains("2 dashboard(s) failed to fetch"));
+    assert!(error.to_string().contains("firefox-desktop-on-steamos"));
+    assert!(error.to_string().contains("test-dashboard"));
+}
+
+#[tokio::test]
+async fn test_fetch_with_partial_failures_returns_error() {
+    let _guard = get_test_lock().lock().await;
+    let mock_server = wiremock::MockServer::start().await;
+
+    mock_get_dashboard(2570, "Firefox Desktop on SteamOS", false)
+        .mount(&mock_server)
+        .await;
+
+    mock_get_dashboard_not_found("test-dashboard")
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+
+    let result = redash_tool::commands::dashboards::fetch(&client, vec!["firefox-desktop-on-steamos".to_string(), "test-dashboard".to_string()]).await;
+
+    if std::path::Path::new("dashboards").exists() {
+        std::fs::remove_dir_all("dashboards").ok();
+    }
+
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    let error_msg = error.to_string();
+    assert!(error_msg.contains("dashboard(s) failed to fetch"), "Error was: {error_msg}");
+    assert!(error_msg.contains("test-dashboard"), "Error was: {error_msg}");
+}
+
+#[tokio::test]
+async fn test_fetch_with_all_success_returns_ok() {
+    let _guard = get_test_lock().lock().await;
+    let mock_server = wiremock::MockServer::start().await;
+
+    mock_get_dashboard(2570, "Firefox Desktop on SteamOS", false)
+        .mount(&mock_server)
+        .await;
+
+    mock_get_dashboard(2558, "Test Dashboard", false)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+
+    let result = redash_tool::commands::dashboards::fetch(&client, vec!["firefox-desktop-on-steamos".to_string(), "test-dashboard".to_string()]).await;
+
+    assert!(result.is_ok());
+
+    let dashboards_dir = std::path::Path::new("dashboards");
+    assert!(dashboards_dir.exists());
+
+    let files: Vec<_> = std::fs::read_dir(dashboards_dir)
+        .unwrap()
+        .filter_map(std::result::Result::ok)
+        .collect();
+
+    assert_eq!(files.len(), 2);
+
+    let yaml_files: Vec<_> = files.iter()
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "yaml"))
+        .collect();
+
+    assert_eq!(yaml_files.len(), 2);
+
+    std::fs::remove_dir_all("dashboards").ok();
+}
+
+#[tokio::test]
+async fn test_archive_with_all_failures_returns_error() {
+    let _guard = get_test_lock().lock().await;
+    let mock_server = wiremock::MockServer::start().await;
+
+    mock_get_dashboard_not_found("firefox-desktop-on-steamos")
+        .mount(&mock_server)
+        .await;
+
+    mock_get_dashboard_not_found("test-dashboard")
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+
+    let result = redash_tool::commands::dashboards::archive(&client, vec!["firefox-desktop-on-steamos".to_string(), "test-dashboard".to_string()]).await;
+
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(error.to_string().contains("2 dashboard(s) failed to"));
+}
+
+#[tokio::test]
+async fn test_unarchive_with_failures_returns_error() {
+    let _guard = get_test_lock().lock().await;
+    let mock_server = wiremock::MockServer::start().await;
+
+    mock_get_dashboard(2570, "Firefox Desktop on SteamOS", true)
+        .mount(&mock_server)
+        .await;
+
+    mock_unarchive_dashboard_forbidden(2570)
+        .mount(&mock_server)
+        .await;
+
+    mock_get_dashboard(2558, "Test Dashboard", true)
+        .mount(&mock_server)
+        .await;
+
+    mock_unarchive_dashboard(2558, "Test Dashboard")
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+
+    let result = redash_tool::commands::dashboards::unarchive(&client, vec!["firefox-desktop-on-steamos".to_string(), "test-dashboard".to_string()]).await;
+
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(error.to_string().contains("1 dashboard(s) failed to unarchive"));
+    assert!(error.to_string().contains("firefox-desktop-on-steamos"));
+}
+
+#[tokio::test]
+async fn test_fetch_with_triple_dash_slug() {
+    let _guard = get_test_lock().lock().await;
+    let mock_server = wiremock::MockServer::start().await;
+
+    mock_get_dashboard_with_slug(
+        2_006_698,
+        "Bug 2006698 - ccov build regression",
+        "bug-2006698---ccov-build-regression",
+        false
+    )
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+
+    let result = redash_tool::commands::dashboards::fetch(&client, vec!["bug-2006698---ccov-build-regression".to_string()]).await;
+
+    assert!(result.is_ok());
+
+    let dashboards_dir = std::path::Path::new("dashboards");
+    assert!(dashboards_dir.exists());
+
+    let expected_file = dashboards_dir.join("2006698-bug-2006698---ccov-build-regression.yaml");
+    assert!(expected_file.exists(), "Expected file {expected_file:?} to exist");
+
+    let yaml_content = std::fs::read_to_string(&expected_file).unwrap();
+    assert!(yaml_content.contains("slug: bug-2006698---ccov-build-regression"));
+    assert!(yaml_content.contains("Bug 2006698 - ccov build regression"));
+
+    std::fs::remove_dir_all("dashboards").ok();
+}
+
+#[tokio::test]
+async fn test_deploy_with_triple_dash_slug() {
+    let _guard = get_test_lock().lock().await;
+    let mock_server = wiremock::MockServer::start().await;
+
+    mock_get_dashboard_with_slug(
+        2_006_698,
+        "Bug 2006698 - ccov build regression",
+        "bug-2006698---ccov-build-regression",
+        false
+    )
+        .mount(&mock_server)
+        .await;
+
+    mock_update_dashboard(2_006_698, "Bug 2006698 - ccov build regression")
+        .mount(&mock_server)
+        .await;
+
+    mock_get_dashboard_with_slug(
+        2_006_698,
+        "Bug 2006698 - ccov build regression",
+        "bug-2006698---ccov-build-regression",
+        false
+    )
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+
+    std::fs::create_dir_all("dashboards").unwrap();
+
+    let yaml_content = r"id: 2006698
+name: Bug 2006698 - ccov build regression
+slug: bug-2006698---ccov-build-regression
+user_id: 530
+is_draft: false
+is_archived: false
+dashboard_filters_enabled: false
+tags: []
+widgets: []
+";
+    std::fs::write("dashboards/2006698-bug-2006698---ccov-build-regression.yaml", yaml_content).unwrap();
+
+    let result = redash_tool::commands::dashboards::deploy(&client, vec!["bug-2006698---ccov-build-regression".to_string()], false).await;
+
+    assert!(result.is_ok(), "Deploy failed: {:?}", result.err());
+
+    std::fs::remove_dir_all("dashboards").ok();
+}
+
+#[tokio::test]
+async fn test_archive_with_triple_dash_slug() {
+    let _guard = get_test_lock().lock().await;
+    let mock_server = wiremock::MockServer::start().await;
+
+    mock_get_dashboard_with_slug(
+        2_006_698,
+        "Bug 2006698 - ccov build regression",
+        "bug-2006698---ccov-build-regression",
+        false
+    )
+        .mount(&mock_server)
+        .await;
+
+    mock_archive_dashboard(2_006_698)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+
+    std::fs::create_dir_all("dashboards").unwrap();
+    let yaml_file = "dashboards/2006698-bug-2006698---ccov-build-regression.yaml";
+    std::fs::write(yaml_file, "test content").unwrap();
+
+    assert!(std::path::Path::new(yaml_file).exists());
+
+    let result = redash_tool::commands::dashboards::archive(&client, vec!["bug-2006698---ccov-build-regression".to_string()]).await;
+
+    assert!(result.is_ok());
+    assert!(!std::path::Path::new(yaml_file).exists(), "File should be deleted after archiving");
+
+    std::fs::remove_dir_all("dashboards").ok();
+}

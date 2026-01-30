@@ -407,3 +407,229 @@ async fn test_get_query_not_archived() {
     assert_eq!(query.name, "Active Query");
     assert!(!query.is_archived);
 }
+
+#[tokio::test]
+async fn test_list_dashboards_success() {
+    let mock_server = MockServer::start().await;
+
+    mock_list_dashboards(2)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    let response = client.list_dashboards(1, 100).await.unwrap();
+
+    assert_eq!(response.count, 2);
+    assert_eq!(response.results.len(), 2);
+    assert_eq!(response.results[0].id, 2570);
+    assert_eq!(response.results[0].name, "Firefox Desktop on SteamOS");
+    assert!(!response.results[0].is_archived);
+}
+
+#[tokio::test]
+async fn test_list_dashboards_empty() {
+    let mock_server = MockServer::start().await;
+
+    mock_list_dashboards_empty()
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    let response = client.list_dashboards(1, 100).await.unwrap();
+
+    assert_eq!(response.count, 0);
+    assert_eq!(response.results.len(), 0);
+}
+
+#[tokio::test]
+async fn test_get_dashboard_success() {
+    let mock_server = MockServer::start().await;
+
+    mock_get_dashboard(2570, "Test Dashboard", false)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    let dashboard = client.get_dashboard("test-dashboard").await.unwrap();
+
+    assert_eq!(dashboard.id, 2570);
+    assert_eq!(dashboard.name, "Test Dashboard");
+    assert_eq!(dashboard.user_id, 530);
+    assert!(!dashboard.is_archived);
+    assert!(!dashboard.is_draft);
+}
+
+#[tokio::test]
+async fn test_get_dashboard_not_found() {
+    let mock_server = MockServer::start().await;
+
+    mock_get_dashboard_not_found("nonexistent-dashboard")
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    let result = client.get_dashboard("nonexistent-dashboard").await;
+
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_get_dashboard_archived() {
+    let mock_server = MockServer::start().await;
+
+    mock_get_dashboard(2570, "Archived Dashboard", true)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    let dashboard = client.get_dashboard("archived-dashboard").await.unwrap();
+
+    assert_eq!(dashboard.id, 2570);
+    assert_eq!(dashboard.name, "Archived Dashboard");
+    assert!(dashboard.is_archived);
+}
+
+#[tokio::test]
+async fn test_update_dashboard_success() {
+    let mock_server = MockServer::start().await;
+
+    mock_update_dashboard(2570, "Updated Dashboard")
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+
+    let dashboard = redash_tool::models::Dashboard {
+        id: 2570,
+        name: "Updated Dashboard".to_string(),
+        slug: "updated-dashboard".to_string(),
+        user_id: 530,
+        is_archived: false,
+        is_draft: false,
+        filters_enabled: false,
+        tags: vec![],
+        widgets: vec![],
+    };
+
+    let result = client.update_dashboard(&dashboard).await.unwrap();
+
+    assert_eq!(result.id, 2570);
+    assert_eq!(result.name, "Updated Dashboard");
+}
+
+#[tokio::test]
+async fn test_archive_dashboard_success() {
+    let mock_server = MockServer::start().await;
+
+    mock_archive_dashboard(2570)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    let result = client.archive_dashboard(2570).await;
+
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_archive_dashboard_not_found() {
+    let mock_server = MockServer::start().await;
+
+    mock_archive_dashboard_not_found(999)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    let result = client.archive_dashboard(999).await;
+
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_unarchive_dashboard_success() {
+    let mock_server = MockServer::start().await;
+
+    mock_unarchive_dashboard(2570, "Test Dashboard")
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    let dashboard = client.unarchive_dashboard(2570).await.unwrap();
+
+    assert_eq!(dashboard.id, 2570);
+    assert_eq!(dashboard.name, "Test Dashboard");
+    assert!(!dashboard.is_archived);
+}
+
+#[tokio::test]
+async fn test_unarchive_dashboard_forbidden() {
+    let mock_server = MockServer::start().await;
+
+    mock_unarchive_dashboard_forbidden(2570)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    let result = client.unarchive_dashboard(2570).await;
+
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_create_widget_success() {
+    let mock_server = MockServer::start().await;
+
+    mock_create_widget(2570, 75035)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+
+    let widget = redash_tool::models::CreateWidget {
+        dashboard_id: 2570,
+        visualization_id: None,
+        text: "Test Widget".to_string(),
+        options: redash_tool::models::WidgetOptions {
+            position: redash_tool::models::WidgetPosition {
+                col: 0,
+                row: 0,
+                size_x: 3,
+                size_y: 2,
+            },
+            parameter_mappings: None,
+        },
+    };
+
+    let result = client.create_widget(&widget).await.unwrap();
+
+    assert_eq!(result.id, 75035);
+    assert_eq!(result.dashboard_id, 2570);
+}
+
+#[tokio::test]
+async fn test_delete_widget_success() {
+    let mock_server = MockServer::start().await;
+
+    mock_delete_widget(75035)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    let result = client.delete_widget(75035).await;
+
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_delete_widget_not_found() {
+    let mock_server = MockServer::start().await;
+
+    mock_delete_widget_not_found(999)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    let result = client.delete_widget(999).await;
+
+    assert!(result.is_err());
+}
