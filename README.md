@@ -4,7 +4,7 @@ Rust CLI for version controlling Redash queries and dashboards.
 
 ## Features
 
-- Version control Redash queries (SQL + metadata)
+- Version control Redash queries (SQL + metadata) and dashboards
 - Automatic query discovery from local files
 - Automatic deployment to Redash
 - Built in Rust for blazing fast performance
@@ -42,9 +42,9 @@ redash-tool init
 redash-tool discover
 ```
 
-5. Fetch specific queries:
+5. Fetch all queries and dashboards:
 ```bash
-redash-tool fetch 123 456 789
+redash-tool fetch
 ```
 
 ## Usage
@@ -52,14 +52,14 @@ redash-tool fetch 123 456 789
 ### Fetch Queries from Redash
 
 ```bash
-redash-tool fetch --all        # Fetch all tracked queries
-redash-tool fetch 123 456 789  # Fetch specific queries
-redash-tool discover            # List available queries
+redash-tool fetch    # Fetch all tracked queries and dashboards
+redash-tool discover  # List available queries
 ```
 
 This creates/updates:
 - `queries/{id}-{slug}.sql` - Query SQL
 - `queries/{id}-{slug}.yaml` - Query metadata (parameters, visualizations, etc.)
+- `dashboards/{id}-{slug}.yaml` - Dashboard metadata
 
 ### Deploy to Redash
 
@@ -76,6 +76,8 @@ redash-tool deploy --all # Deploy all queries
 queries/
 ├── 123-mobile-crashes.sql
 └── 123-mobile-crashes.yaml
+dashboards/
+└── 456-my-dashboard.yaml
 ```
 
 Query IDs are embedded in filenames (`{id}-{slug}.{ext}`), so no separate config file is needed.

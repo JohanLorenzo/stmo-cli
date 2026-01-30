@@ -253,6 +253,115 @@ impl JobStatus {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Dashboard {
+    pub id: u64,
+    pub name: String,
+    pub slug: String,
+    pub user_id: u64,
+    pub is_archived: bool,
+    pub is_draft: bool,
+    pub dashboard_filters_enabled: bool,
+    pub tags: Vec<String>,
+    pub widgets: Vec<Widget>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Widget {
+    pub id: u64,
+    pub dashboard_id: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visualization_id: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visualization: Option<WidgetVisualization>,
+    #[serde(default)]
+    pub text: String,
+    pub options: WidgetOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WidgetVisualization {
+    pub id: u64,
+    pub name: String,
+    pub query: VisualizationQuery,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VisualizationQuery {
+    pub id: u64,
+    pub name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct WidgetOptions {
+    pub position: WidgetPosition,
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "parameterMappings")]
+    pub parameter_mappings: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct WidgetPosition {
+    pub col: u32,
+    pub row: u32,
+    #[serde(rename = "sizeX")]
+    pub size_x: u32,
+    #[serde(rename = "sizeY")]
+    pub size_y: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DashboardMetadata {
+    pub id: u64,
+    pub name: String,
+    pub slug: String,
+    pub user_id: u64,
+    pub is_draft: bool,
+    pub is_archived: bool,
+    pub dashboard_filters_enabled: bool,
+    pub tags: Vec<String>,
+    pub widgets: Vec<WidgetMetadata>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WidgetMetadata {
+    pub id: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visualization_id: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub query_id: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visualization_name: Option<String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub text: String,
+    pub options: WidgetOptions,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DashboardsResponse {
+    pub results: Vec<DashboardSummary>,
+    pub count: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DashboardSummary {
+    pub id: u64,
+    pub name: String,
+    #[allow(dead_code)]
+    pub slug: String,
+    pub is_draft: bool,
+    pub is_archived: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CreateWidget {
+    pub dashboard_id: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visualization_id: Option<u64>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub text: String,
+    pub options: WidgetOptions,
+}
+
 #[cfg(test)]
 #[allow(clippy::missing_errors_doc)]
 #[allow(clippy::unnecessary_literal_unwrap)]
@@ -463,5 +572,276 @@ tags:
         assert!(json.contains("\"name\":\"My DB\""));
         assert!(json.contains("\"type\":\"mysql\""));
         assert!(json.contains("\"syntax\":\"sql\""));
+    }
+
+    #[test]
+    fn test_dashboard_deserialization() {
+        let json = r#"{
+            "id": 2570,
+            "name": "Test Dashboard",
+            "slug": "test-dashboard",
+            "user_id": 530,
+            "is_archived": false,
+            "is_draft": false,
+            "dashboard_filters_enabled": true,
+            "tags": ["tag1", "tag2"],
+            "widgets": []
+        }"#;
+
+        let dashboard: Dashboard = serde_json::from_str(json).unwrap();
+        assert_eq!(dashboard.id, 2570);
+        assert_eq!(dashboard.name, "Test Dashboard");
+        assert_eq!(dashboard.slug, "test-dashboard");
+        assert_eq!(dashboard.user_id, 530);
+        assert!(!dashboard.is_archived);
+        assert!(!dashboard.is_draft);
+        assert!(dashboard.dashboard_filters_enabled);
+        assert_eq!(dashboard.tags, vec!["tag1", "tag2"]);
+        assert_eq!(dashboard.widgets.len(), 0);
+    }
+
+    #[test]
+    fn test_dashboard_with_widgets() {
+        let json = r##"{
+            "id": 2570,
+            "name": "Test Dashboard",
+            "slug": "test-dashboard",
+            "user_id": 530,
+            "is_archived": false,
+            "is_draft": false,
+            "dashboard_filters_enabled": false,
+            "tags": [],
+            "widgets": [
+                {
+                    "id": 75035,
+                    "dashboard_id": 2570,
+                    "text": "# Test Widget",
+                    "options": {
+                        "position": {
+                            "col": 0,
+                            "row": 0,
+                            "sizeX": 6,
+                            "sizeY": 2
+                        }
+                    }
+                },
+                {
+                    "id": 75029,
+                    "dashboard_id": 2570,
+                    "visualization_id": 279588,
+                    "visualization": {
+                        "id": 279588,
+                        "name": "Total MAU",
+                        "query": {
+                            "id": 114049,
+                            "name": "MAU Query"
+                        }
+                    },
+                    "text": "",
+                    "options": {
+                        "position": {
+                            "col": 3,
+                            "row": 2,
+                            "sizeX": 3,
+                            "sizeY": 8
+                        },
+                        "parameterMappings": {
+                            "channel": {
+                                "name": "channel",
+                                "type": "dashboard-level"
+                            }
+                        }
+                    }
+                }
+            ]
+        }"##;
+
+        let dashboard: Dashboard = serde_json::from_str(json).unwrap();
+        assert_eq!(dashboard.widgets.len(), 2);
+        assert_eq!(dashboard.widgets[0].id, 75035);
+        assert_eq!(dashboard.widgets[0].text, "# Test Widget");
+        assert!(dashboard.widgets[0].visualization_id.is_none());
+        assert_eq!(dashboard.widgets[1].id, 75029);
+        assert_eq!(dashboard.widgets[1].visualization_id, Some(279_588));
+        let viz = dashboard.widgets[1].visualization.as_ref().unwrap();
+        assert_eq!(viz.id, 279_588);
+        assert_eq!(viz.query.id, 114_049);
+    }
+
+    #[test]
+    fn test_widget_position_serde() {
+        let json = r#"{
+            "col": 3,
+            "row": 5,
+            "sizeX": 6,
+            "sizeY": 4
+        }"#;
+
+        let position: WidgetPosition = serde_json::from_str(json).unwrap();
+        assert_eq!(position.col, 3);
+        assert_eq!(position.row, 5);
+        assert_eq!(position.size_x, 6);
+        assert_eq!(position.size_y, 4);
+
+        let serialized = serde_json::to_string(&position).unwrap();
+        assert!(serialized.contains("\"sizeX\":6"));
+        assert!(serialized.contains("\"sizeY\":4"));
+    }
+
+    #[test]
+    fn test_dashboard_metadata_yaml() {
+        let yaml = r"
+id: 2570
+name: Test Dashboard
+slug: test-dashboard
+user_id: 530
+is_draft: false
+is_archived: false
+dashboard_filters_enabled: true
+tags:
+  - tag1
+  - tag2
+widgets:
+  - id: 75035
+    visualization_id: null
+    query_id: null
+    visualization_name: null
+    text: '# Test Widget'
+    options:
+      position:
+        col: 0
+        row: 0
+        sizeX: 6
+        sizeY: 2
+      parameter_mappings: null
+";
+
+        let metadata: DashboardMetadata = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(metadata.id, 2570);
+        assert_eq!(metadata.name, "Test Dashboard");
+        assert_eq!(metadata.slug, "test-dashboard");
+        assert_eq!(metadata.user_id, 530);
+        assert!(!metadata.is_draft);
+        assert!(!metadata.is_archived);
+        assert!(metadata.dashboard_filters_enabled);
+        assert_eq!(metadata.tags, vec!["tag1", "tag2"]);
+        assert_eq!(metadata.widgets.len(), 1);
+        assert_eq!(metadata.widgets[0].id, 75035);
+        assert_eq!(metadata.widgets[0].text, "# Test Widget");
+    }
+
+    #[test]
+    fn test_widget_metadata_text_widget() {
+        let yaml = r"
+id: 75035
+visualization_id: null
+query_id: null
+visualization_name: null
+text: '## Section Header'
+options:
+  position:
+    col: 0
+    row: 0
+    sizeX: 6
+    sizeY: 2
+  parameter_mappings: null
+";
+
+        let widget: WidgetMetadata = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(widget.id, 75035);
+        assert!(widget.visualization_id.is_none());
+        assert!(widget.query_id.is_none());
+        assert!(widget.visualization_name.is_none());
+        assert_eq!(widget.text, "## Section Header");
+        assert_eq!(widget.options.position.col, 0);
+        assert_eq!(widget.options.position.size_x, 6);
+    }
+
+    #[test]
+    fn test_widget_metadata_viz_widget() {
+        let yaml = r"
+id: 75029
+visualization_id: 279588
+query_id: 114049
+visualization_name: Total MAU
+text: ''
+options:
+  position:
+    col: 3
+    row: 2
+    sizeX: 3
+    sizeY: 8
+  parameterMappings:
+    channel:
+      name: channel
+      type: dashboard-level
+";
+
+        let widget: WidgetMetadata = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(widget.id, 75029);
+        assert_eq!(widget.visualization_id, Some(279_588));
+        assert_eq!(widget.query_id, Some(114_049));
+        assert_eq!(widget.visualization_name, Some("Total MAU".to_string()));
+        assert_eq!(widget.text, "");
+        assert!(widget.options.parameter_mappings.is_some());
+    }
+
+    #[test]
+    fn test_create_widget_serialization() {
+        let widget = CreateWidget {
+            dashboard_id: 2570,
+            visualization_id: Some(279_588),
+            text: String::new(),
+            options: WidgetOptions {
+                position: WidgetPosition {
+                    col: 0,
+                    row: 0,
+                    size_x: 3,
+                    size_y: 2,
+                },
+                parameter_mappings: None,
+            },
+        };
+
+        let json = serde_json::to_string(&widget).unwrap();
+        assert!(json.contains("\"dashboard_id\":2570"));
+        assert!(json.contains("\"visualization_id\":279588"));
+        assert!(json.contains("\"sizeX\":3"));
+        assert!(json.contains("\"sizeY\":2"));
+    }
+
+    #[test]
+    fn test_dashboards_response() {
+        let json = r#"{
+            "results": [
+                {
+                    "id": 2570,
+                    "name": "Dashboard 1",
+                    "slug": "dashboard-1",
+                    "is_draft": false,
+                    "is_archived": false
+                },
+                {
+                    "id": 2558,
+                    "name": "Dashboard 2",
+                    "slug": "dashboard-2",
+                    "is_draft": true,
+                    "is_archived": false
+                }
+            ],
+            "count": 2
+        }"#;
+
+        let response: DashboardsResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(response.results.len(), 2);
+        assert_eq!(response.count, 2);
+        assert_eq!(response.results[0].id, 2570);
+        assert_eq!(response.results[0].name, "Dashboard 1");
+        assert_eq!(response.results[0].slug, "dashboard-1");
+        assert!(!response.results[0].is_draft);
+        assert!(!response.results[0].is_archived);
+        assert_eq!(response.results[1].id, 2558);
+        assert_eq!(response.results[1].slug, "dashboard-2");
+        assert!(response.results[1].is_draft);
     }
 }
