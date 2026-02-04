@@ -409,15 +409,15 @@ async fn test_get_query_not_archived() {
 }
 
 #[tokio::test]
-async fn test_list_dashboards_success() {
+async fn test_list_favorite_dashboards_success() {
     let mock_server = MockServer::start().await;
 
-    mock_list_dashboards(2)
+    mock_list_favorite_dashboards(2)
         .mount(&mock_server)
         .await;
 
     let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
-    let response = client.list_dashboards(1, 100).await.unwrap();
+    let response = client.list_favorite_dashboards(1, 100).await.unwrap();
 
     assert_eq!(response.count, 2);
     assert_eq!(response.results.len(), 2);
@@ -427,15 +427,15 @@ async fn test_list_dashboards_success() {
 }
 
 #[tokio::test]
-async fn test_list_dashboards_empty() {
+async fn test_list_favorite_dashboards_empty() {
     let mock_server = MockServer::start().await;
 
-    mock_list_dashboards_empty()
+    mock_list_favorite_dashboards_empty()
         .mount(&mock_server)
         .await;
 
     let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
-    let response = client.list_dashboards(1, 100).await.unwrap();
+    let response = client.list_favorite_dashboards(1, 100).await.unwrap();
 
     assert_eq!(response.count, 0);
     assert_eq!(response.results.len(), 0);

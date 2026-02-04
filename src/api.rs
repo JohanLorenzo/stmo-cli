@@ -373,8 +373,8 @@ impl RedashClient {
             .context("Failed to parse unarchive response")
     }
 
-    pub async fn list_dashboards(&self, page: u32, page_size: u32) -> Result<DashboardsResponse> {
-        let url = format!("{}/api/dashboards?page={page}&page_size={page_size}", self.base_url);
+    pub async fn list_favorite_dashboards(&self, page: u32, page_size: u32) -> Result<DashboardsResponse> {
+        let url = format!("{}/api/dashboards/favorites?page={page}&page_size={page_size}", self.base_url);
         let response = self.client
             .get(&url)
             .send()
@@ -505,13 +505,13 @@ impl RedashClient {
         Ok(())
     }
 
-    pub async fn fetch_all_dashboards(&self) -> Result<Vec<DashboardSummary>> {
+    pub async fn fetch_favorite_dashboards(&self) -> Result<Vec<DashboardSummary>> {
         let mut all_dashboards = Vec::new();
         let mut page = 1;
         let page_size = 100;
 
         loop {
-            let response = self.list_dashboards(page, page_size).await?;
+            let response = self.list_favorite_dashboards(page, page_size).await?;
 
             if response.results.is_empty() {
                 break;

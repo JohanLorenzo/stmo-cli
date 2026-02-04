@@ -329,9 +329,9 @@ pub fn mock_unarchive_query_forbidden(query_id: u64) -> Mock {
         .respond_with(ResponseTemplate::new(403))
 }
 
-pub fn mock_list_dashboards(count: u64) -> Mock {
+pub fn mock_list_favorite_dashboards(count: u64) -> Mock {
     Mock::given(method("GET"))
-        .and(path("/api/dashboards"))
+        .and(path("/api/dashboards/favorites"))
         .respond_with(ResponseTemplate::new(200).set_body_json(
             serde_json::json!({
                 "results": [
@@ -355,9 +355,9 @@ pub fn mock_list_dashboards(count: u64) -> Mock {
         ))
 }
 
-pub fn mock_list_dashboards_empty() -> Mock {
+pub fn mock_list_favorite_dashboards_empty() -> Mock {
     Mock::given(method("GET"))
-        .and(path("/api/dashboards"))
+        .and(path("/api/dashboards/favorites"))
         .respond_with(ResponseTemplate::new(200).set_body_json(
             serde_json::json!({
                 "results": [],

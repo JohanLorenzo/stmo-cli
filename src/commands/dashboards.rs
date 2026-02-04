@@ -37,8 +37,8 @@ fn extract_dashboard_slugs_from_directory() -> Result<Vec<String>> {
 }
 
 pub async fn discover(client: &RedashClient) -> Result<()> {
-    println!("Fetching all dashboards from Redash...\n");
-    let dashboards = client.fetch_all_dashboards().await?;
+    println!("Fetching your favorite dashboards from Redash...\n");
+    let dashboards = client.fetch_favorite_dashboards().await?;
 
     if dashboards.is_empty() {
         println!("No dashboards found.");
@@ -127,6 +127,7 @@ pub async fn fetch(client: &RedashClient, dashboard_slugs: Vec<String>) -> Resul
 
     if failed_slugs.is_empty() {
         println!("\n✓ All dashboards fetched successfully");
+        println!("\nTip: Favorite these dashboards in the Redash web UI so they appear in 'dashboards discover'.");
         Ok(())
     } else {
         println!("\n✓ {success_count} dashboard(s) fetched successfully");
