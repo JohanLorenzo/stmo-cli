@@ -7,9 +7,7 @@ use std::path::Path;
 use crate::api::RedashClient;
 use crate::models::{CreateWidget, Dashboard, DashboardMetadata, WidgetMetadata};
 
-fn extract_dashboard_slugs_from_directory() -> Result<Vec<String>> {
-    let dashboards_dir = Path::new("dashboards");
-
+fn extract_dashboard_slugs_from_path(dashboards_dir: &Path) -> Result<Vec<String>> {
     if !dashboards_dir.exists() {
         return Ok(Vec::new());
     }
@@ -34,6 +32,10 @@ fn extract_dashboard_slugs_from_directory() -> Result<Vec<String>> {
     dashboard_slugs.dedup();
 
     Ok(dashboard_slugs)
+}
+
+fn extract_dashboard_slugs_from_directory() -> Result<Vec<String>> {
+    extract_dashboard_slugs_from_path(Path::new("dashboards"))
 }
 
 pub async fn discover(client: &RedashClient) -> Result<()> {
@@ -411,90 +413,79 @@ pub async fn unarchive(client: &RedashClient, dashboard_slugs: Vec<String>) -> R
 #[allow(clippy::missing_errors_doc)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    static TEST_MUTEX: Mutex<()> = Mutex::new(());
+    use tempfile::TempDir;
 
     #[test]
     fn test_extract_dashboard_slugs_from_directory_empty() {
-        let result = extract_dashboard_slugs_from_directory();
+        let temp_dir = TempDir::new().unwrap();
+        let result = extract_dashboard_slugs_from_path(temp_dir.path());
         assert!(result.is_ok());
         let slugs = result.unwrap();
-        assert!(slugs.is_empty() || !slugs.is_empty());
+        assert!(slugs.is_empty());
     }
 
     #[test]
     fn test_extract_dashboard_slugs_with_triple_dash() {
-        let _guard = TEST_MUTEX.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
 
-        fs::create_dir_all("dashboards").unwrap();
+        fs::write(temp_path.join("2006698-bug-2006698---ccov-build-regression.yaml"), "test").unwrap();
+        fs::write(temp_path.join("2570-firefox-desktop-on-steamos.yaml"), "test").unwrap();
 
-        fs::write("dashboards/2006698-bug-2006698---ccov-build-regression.yaml", "test").unwrap();
-        fs::write("dashboards/2570-firefox-desktop-on-steamos.yaml", "test").unwrap();
-
-        let result = extract_dashboard_slugs_from_directory();
+        let result = extract_dashboard_slugs_from_path(temp_path);
         assert!(result.is_ok());
 
         let slugs = result.unwrap();
 
         assert!(slugs.contains(&"bug-2006698---ccov-build-regression".to_string()));
         assert!(slugs.contains(&"firefox-desktop-on-steamos".to_string()));
-
-        fs::remove_dir_all("dashboards").ok();
     }
 
     #[test]
     fn test_extract_dashboard_slugs_deduplication() {
-        let _guard = TEST_MUTEX.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
 
-        fs::create_dir_all("dashboards").unwrap();
+        fs::write(temp_path.join("2006698-bug-2006698---ccov-build-regression.yaml"), "test").unwrap();
+        fs::write(temp_path.join("2006699-bug-2006698---ccov-build-regression.yaml"), "test").unwrap();
 
-        fs::write("dashboards/2006698-bug-2006698---ccov-build-regression.yaml", "test").unwrap();
-        fs::write("dashboards/2006699-bug-2006698---ccov-build-regression.yaml", "test").unwrap();
-
-        let result = extract_dashboard_slugs_from_directory();
+        let result = extract_dashboard_slugs_from_path(temp_path);
         assert!(result.is_ok());
 
         let slugs = result.unwrap();
 
         assert_eq!(slugs.len(), 1);
         assert_eq!(slugs[0], "bug-2006698---ccov-build-regression");
-
-        fs::remove_dir_all("dashboards").ok();
     }
 
     #[test]
     fn test_extract_dashboard_slugs_ignores_non_yaml() {
-        let _guard = TEST_MUTEX.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
 
-        fs::create_dir_all("dashboards").unwrap();
+        fs::write(temp_path.join("2006698-bug-2006698---ccov-build-regression.yaml"), "test").unwrap();
+        fs::write(temp_path.join("2570-firefox-desktop-on-steamos.txt"), "test").unwrap();
+        fs::write(temp_path.join("README.md"), "test").unwrap();
 
-        fs::write("dashboards/2006698-bug-2006698---ccov-build-regression.yaml", "test").unwrap();
-        fs::write("dashboards/2570-firefox-desktop-on-steamos.txt", "test").unwrap();
-        fs::write("dashboards/README.md", "test").unwrap();
-
-        let result = extract_dashboard_slugs_from_directory();
+        let result = extract_dashboard_slugs_from_path(temp_path);
         assert!(result.is_ok());
 
         let slugs = result.unwrap();
 
         assert_eq!(slugs.len(), 1);
         assert_eq!(slugs[0], "bug-2006698---ccov-build-regression");
-
-        fs::remove_dir_all("dashboards").ok();
     }
 
     #[test]
     fn test_extract_dashboard_slugs_sorted() {
-        let _guard = TEST_MUTEX.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
 
-        fs::create_dir_all("dashboards").unwrap();
+        fs::write(temp_path.join("3000-zebra-dashboard.yaml"), "test").unwrap();
+        fs::write(temp_path.join("2006698-bug-2006698---ccov-build-regression.yaml"), "test").unwrap();
+        fs::write(temp_path.join("1000-alpha-dashboard.yaml"), "test").unwrap();
 
-        fs::write("dashboards/3000-zebra-dashboard.yaml", "test").unwrap();
-        fs::write("dashboards/2006698-bug-2006698---ccov-build-regression.yaml", "test").unwrap();
-        fs::write("dashboards/1000-alpha-dashboard.yaml", "test").unwrap();
-
-        let result = extract_dashboard_slugs_from_directory();
+        let result = extract_dashboard_slugs_from_path(temp_path);
         assert!(result.is_ok());
 
         let slugs = result.unwrap();
@@ -503,7 +494,5 @@ mod tests {
         assert_eq!(slugs[0], "alpha-dashboard");
         assert_eq!(slugs[1], "bug-2006698---ccov-build-regression");
         assert_eq!(slugs[2], "zebra-dashboard");
-
-        fs::remove_dir_all("dashboards").ok();
     }
 }
