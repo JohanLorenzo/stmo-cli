@@ -229,9 +229,13 @@ impl RedashClient {
             .json(&request)
             .send()
             .await
-            .context(format!("Failed to refresh query {query_id}"))?
-            .error_for_status()
-            .context("API returned error status")?;
+            .context(format!("Failed to refresh query {query_id}"))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_body = response.text().await.unwrap_or_else(|_| "Unable to read error response".to_string());
+            anyhow::bail!("API returned error status {status}: {error_body}");
+        }
 
         let job_response: crate::models::JobResponse = response
             .json()

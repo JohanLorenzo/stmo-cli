@@ -482,3 +482,21 @@ pub fn mock_delete_widget_not_found(widget_id: u64) -> Mock {
         .and(path(format!("/api/widgets/{widget_id}")))
         .respond_with(ResponseTemplate::new(404))
 }
+
+pub fn mock_refresh_query_bad_request(query_id: u64, error_message: &str) -> Mock {
+    Mock::given(method("POST"))
+        .and(path(format!("/api/queries/{query_id}/results")))
+        .respond_with(
+            ResponseTemplate::new(400)
+                .set_body_json(serde_json::json!({"message": error_message}))
+        )
+}
+
+pub fn mock_refresh_query_forbidden(query_id: u64) -> Mock {
+    Mock::given(method("POST"))
+        .and(path(format!("/api/queries/{query_id}/results")))
+        .respond_with(
+            ResponseTemplate::new(403)
+                .set_body_json(serde_json::json!({"message": "Access denied"}))
+        )
+}

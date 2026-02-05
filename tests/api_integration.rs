@@ -633,3 +633,40 @@ async fn test_delete_widget_not_found() {
 
     assert!(result.is_err());
 }
+
+#[tokio::test]
+async fn test_refresh_query_bad_request_includes_error_body() {
+    let mock_server = MockServer::start().await;
+
+    mock_refresh_query_bad_request(
+        123,
+        "The following parameter values are incompatible with their definitions: worker_pool"
+    )
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    let result = client.refresh_query(123, None).await;
+
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.to_string().contains("400"));
+    assert!(err.to_string().contains("parameter values are incompatible"));
+}
+
+#[tokio::test]
+async fn test_refresh_query_forbidden_includes_error_body() {
+    let mock_server = MockServer::start().await;
+
+    mock_refresh_query_forbidden(123)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    let result = client.refresh_query(123, None).await;
+
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.to_string().contains("403"));
+    assert!(err.to_string().contains("Access denied"));
+}
