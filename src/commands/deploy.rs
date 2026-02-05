@@ -19,6 +19,22 @@ fn slugify(s: &str) -> String {
         .join("-")
 }
 
+fn validate_enum_options(metadata: &crate::models::QueryMetadata, yaml_path: &str) -> Result<()> {
+    for param in &metadata.options.parameters {
+        if let Some(enum_opts) = &param.enum_options
+            && enum_opts.contains("\\n")
+        {
+            bail!(
+                "In {yaml_path}: parameter '{}' has enumOptions with escaped newlines. \
+                Use YAML multiline format instead:\n\n\
+                enumOptions: |-\n  option1\n  option2",
+                param.name
+            );
+        }
+    }
+    Ok(())
+}
+
 fn get_changed_query_ids() -> Result<HashSet<u64>> {
     let output = Command::new("git")
         .args(["status", "--porcelain"])
@@ -177,6 +193,8 @@ pub async fn deploy(client: &RedashClient, query_ids: Vec<u64>, all: bool) -> Re
         let metadata: crate::models::QueryMetadata = serde_yaml::from_str(&metadata_content)
             .context(format!("Failed to parse {yaml_path}"))?;
 
+        validate_enum_options(&metadata, &yaml_path)?;
+
         let result_query = if *id == 0 {
             let create_query = crate::models::CreateQuery {
                 name: metadata.name.clone(),
@@ -221,4 +239,97 @@ pub async fn deploy(client: &RedashClient, query_ids: Vec<u64>, all: bool) -> Re
     println!("\n✓ All resources deployed successfully");
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_enum_options_rejects_escaped_newlines() {
+        let metadata = crate::models::QueryMetadata {
+            id: 1,
+            name: "Test Query".to_string(),
+            description: None,
+            data_source_id: 1,
+            user_id: None,
+            schedule: None,
+            options: crate::models::QueryOptions {
+                parameters: vec![crate::models::Parameter {
+                    name: "test_param".to_string(),
+                    title: "Test Param".to_string(),
+                    param_type: "enum".to_string(),
+                    enum_options: Some("option1\\noption2\\noption3".to_string()),
+                    query_id: Some(1),
+                    value: None,
+                    multi_values_options: None,
+                }],
+            },
+            visualizations: vec![],
+            tags: None,
+        };
+
+        let result = validate_enum_options(&metadata, "test.yaml");
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("escaped newlines"));
+        assert!(err_msg.contains("test_param"));
+        assert!(err_msg.contains("YAML multiline format"));
+    }
+
+    #[test]
+    fn test_validate_enum_options_accepts_multiline() {
+        let metadata = crate::models::QueryMetadata {
+            id: 1,
+            name: "Test Query".to_string(),
+            description: None,
+            data_source_id: 1,
+            user_id: None,
+            schedule: None,
+            options: crate::models::QueryOptions {
+                parameters: vec![crate::models::Parameter {
+                    name: "test_param".to_string(),
+                    title: "Test Param".to_string(),
+                    param_type: "enum".to_string(),
+                    enum_options: Some("option1\noption2\noption3".to_string()),
+                    query_id: Some(1),
+                    value: None,
+                    multi_values_options: None,
+                }],
+            },
+            visualizations: vec![],
+            tags: None,
+        };
+
+        let result = validate_enum_options(&metadata, "test.yaml");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_enum_options_accepts_no_enum() {
+        let metadata = crate::models::QueryMetadata {
+            id: 1,
+            name: "Test Query".to_string(),
+            description: None,
+            data_source_id: 1,
+            user_id: None,
+            schedule: None,
+            options: crate::models::QueryOptions {
+                parameters: vec![crate::models::Parameter {
+                    name: "test_param".to_string(),
+                    title: "Test Param".to_string(),
+                    param_type: "text".to_string(),
+                    enum_options: None,
+                    query_id: Some(1),
+                    value: None,
+                    multi_values_options: None,
+                }],
+            },
+            visualizations: vec![],
+            tags: None,
+        };
+
+        let result = validate_enum_options(&metadata, "test.yaml");
+        assert!(result.is_ok());
+    }
 }
