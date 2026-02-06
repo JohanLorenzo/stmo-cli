@@ -7,8 +7,8 @@ use clap::{Parser, Subcommand};
 use api::RedashClient;
 
 #[derive(Parser)]
-#[command(name = "redash-tool")]
-#[command(about = "Version control tool for Redash queries", long_about = None)]
+#[command(name = "stmo-cli")]
+#[command(about = "CLI tool for version controlling Redash queries and dashboards", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -19,7 +19,7 @@ enum Commands {
     #[command(about = "List all queries from Redash")]
     Discover,
 
-    #[command(about = "Create queries directory")]
+    #[command(about = "Scaffold a new query/dashboard repository")]
     Init,
 
     #[command(about = "Fetch queries from Redash")]
@@ -132,6 +132,10 @@ enum DashboardCommands {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
+    if let Commands::Init = cli.command {
+        return commands::init::init();
+    }
+
     let api_key = std::env::var("REDASH_API_KEY")
         .context("REDASH_API_KEY environment variable not set")?;
 
@@ -142,7 +146,7 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Commands::Discover => commands::discover::discover(&client).await?,
-        Commands::Init => commands::init::init()?,
+        Commands::Init => unreachable!("Init handled above"),
         Commands::Fetch { query_ids, all } => commands::fetch::fetch(&client, query_ids, all).await?,
         Commands::Deploy { query_ids, all } => commands::deploy::deploy(&client, query_ids, all).await?,
         Commands::Execute { query_id, param, format, interactive, timeout, limit } => {
@@ -175,12 +179,12 @@ async fn main() -> Result<()> {
             } else if !query_ids.is_empty() {
                 commands::archive::archive(&client, query_ids).await?;
             } else {
-                anyhow::bail!("No query IDs specified. Use specific query IDs or --cleanup flag.\n\nExamples:\n  cargo run -- archive 123 456\n  cargo run -- archive --cleanup");
+                anyhow::bail!("No query IDs specified. Use specific query IDs or --cleanup flag.\n\nExamples:\n  stmo-cli archive 123 456\n  stmo-cli archive --cleanup");
             }
         }
         Commands::Unarchive { query_ids } => {
             if query_ids.is_empty() {
-                anyhow::bail!("No query IDs specified. Provide query IDs to unarchive.\n\nExample:\n  cargo run -- unarchive 123 456");
+                anyhow::bail!("No query IDs specified. Provide query IDs to unarchive.\n\nExample:\n  stmo-cli unarchive 123 456");
             }
             commands::archive::unarchive(&client, query_ids).await?;
         }

@@ -77,7 +77,7 @@ fn get_all_query_metadata() -> Result<Vec<(u64, String)>> {
     let queries_dir = Path::new("queries");
 
     if !queries_dir.exists() {
-        bail!("queries directory not found. Run 'cargo run -- fetch' first.");
+        bail!("queries directory not found. Run 'stmo-cli fetch' first.");
     }
 
     let mut queries = Vec::new();

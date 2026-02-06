@@ -1,4 +1,4 @@
-# redash-tool
+# stmo-cli
 
 Rust CLI for version controlling Redash queries and dashboards.
 
@@ -19,7 +19,7 @@ Rust CLI for version controlling Redash queries and dashboards.
 
 ```bash
 cargo build --release
-# The binary will be at ./target/release/redash-tool
+# The binary will be at ./target/release/stmo-cli
 ```
 
 ## Setup
@@ -34,17 +34,17 @@ export REDASH_URL="https://sql.telemetry.mozilla.org"  # optional, this is the d
 
 3. Create directories:
 ```bash
-redash-tool init
+stmo-cli init
 ```
 
 4. Discover available queries:
 ```bash
-redash-tool discover
+stmo-cli discover
 ```
 
 5. Fetch specific queries:
 ```bash
-redash-tool fetch 123 456 789
+stmo-cli fetch 123 456 789
 ```
 
 ## Usage
@@ -52,9 +52,9 @@ redash-tool fetch 123 456 789
 ### Fetch Queries from Redash
 
 ```bash
-redash-tool fetch --all        # Fetch all tracked queries
-redash-tool fetch 123 456 789  # Fetch specific queries
-redash-tool discover            # List available queries
+stmo-cli fetch --all        # Fetch all tracked queries
+stmo-cli fetch 123 456 789  # Fetch specific queries
+stmo-cli discover            # List available queries
 ```
 
 This creates/updates:
@@ -64,8 +64,8 @@ This creates/updates:
 ### Deploy to Redash
 
 ```bash
-redash-tool deploy       # Deploy changed queries (detected via git status)
-redash-tool deploy --all # Deploy all queries
+stmo-cli deploy       # Deploy changed queries (detected via git status)
+stmo-cli deploy --all # Deploy all queries
 ```
 
 **Warning**: This force overwrites the queries in Redash. Git is the source of truth.
@@ -102,7 +102,7 @@ pre-commit install
 
 ```bash
 cargo build --release
-./target/release/redash-tool --help
+./target/release/stmo-cli --help
 ```
 
 ## Architecture

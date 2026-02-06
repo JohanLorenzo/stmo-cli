@@ -60,7 +60,7 @@ fn load_query_metadata_by_id(query_id: u64) -> Result<(QueryMetadata, String, St
         }
     }
 
-    bail!("Query {query_id} not found in queries/ directory. Run 'cargo run -- fetch {query_id}' first.");
+    bail!("Query {query_id} not found in queries/ directory. Run 'stmo-cli fetch {query_id}' first.");
 }
 
 fn prompt_for_parameter(param: &Parameter) -> Result<serde_json::Value> {

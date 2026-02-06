@@ -3,7 +3,7 @@
 
 mod common;
 
-use redash_tool::api::RedashClient;
+use stmo_cli::api::RedashClient;
 use common::*;
 use tempfile::TempDir;
 use std::env;
@@ -55,7 +55,7 @@ async fn test_fetch_with_all_failures_returns_error() {
 
     let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
 
-    let result = redash_tool::commands::dashboards::fetch(&client, vec!["firefox-desktop-on-steamos".to_string(), "test-dashboard".to_string()]).await;
+    let result = stmo_cli::commands::dashboards::fetch(&client, vec!["firefox-desktop-on-steamos".to_string(), "test-dashboard".to_string()]).await;
 
     assert!(result.is_err());
     let error = result.unwrap_err();
@@ -80,7 +80,7 @@ async fn test_fetch_with_partial_failures_returns_error() {
 
     let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
 
-    let result = redash_tool::commands::dashboards::fetch(&client, vec!["firefox-desktop-on-steamos".to_string(), "test-dashboard".to_string()]).await;
+    let result = stmo_cli::commands::dashboards::fetch(&client, vec!["firefox-desktop-on-steamos".to_string(), "test-dashboard".to_string()]).await;
 
     assert!(result.is_err());
     let error = result.unwrap_err();
@@ -105,7 +105,7 @@ async fn test_fetch_with_all_success_returns_ok() {
 
     let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
 
-    let result = redash_tool::commands::dashboards::fetch(&client, vec!["firefox-desktop-on-steamos".to_string(), "test-dashboard".to_string()]).await;
+    let result = stmo_cli::commands::dashboards::fetch(&client, vec!["firefox-desktop-on-steamos".to_string(), "test-dashboard".to_string()]).await;
 
     assert!(result.is_ok());
 
@@ -142,7 +142,7 @@ async fn test_archive_with_all_failures_returns_error() {
 
     let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
 
-    let result = redash_tool::commands::dashboards::archive(&client, vec!["firefox-desktop-on-steamos".to_string(), "test-dashboard".to_string()]).await;
+    let result = stmo_cli::commands::dashboards::archive(&client, vec!["firefox-desktop-on-steamos".to_string(), "test-dashboard".to_string()]).await;
 
     assert!(result.is_err());
     let error = result.unwrap_err();
@@ -173,7 +173,7 @@ async fn test_unarchive_with_failures_returns_error() {
 
     let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
 
-    let result = redash_tool::commands::dashboards::unarchive(&client, vec!["firefox-desktop-on-steamos".to_string(), "test-dashboard".to_string()]).await;
+    let result = stmo_cli::commands::dashboards::unarchive(&client, vec!["firefox-desktop-on-steamos".to_string(), "test-dashboard".to_string()]).await;
 
     assert!(result.is_err());
     let error = result.unwrap_err();
@@ -198,7 +198,7 @@ async fn test_fetch_with_triple_dash_slug() {
 
     let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
 
-    let result = redash_tool::commands::dashboards::fetch(&client, vec!["bug-2006698---ccov-build-regression".to_string()]).await;
+    let result = stmo_cli::commands::dashboards::fetch(&client, vec!["bug-2006698---ccov-build-regression".to_string()]).await;
 
     assert!(result.is_ok());
 
@@ -257,7 +257,7 @@ widgets: []
 ";
     std::fs::write("dashboards/2006698-bug-2006698---ccov-build-regression.yaml", yaml_content).unwrap();
 
-    let result = redash_tool::commands::dashboards::deploy(&client, vec!["bug-2006698---ccov-build-regression".to_string()], false).await;
+    let result = stmo_cli::commands::dashboards::deploy(&client, vec!["bug-2006698---ccov-build-regression".to_string()], false).await;
 
     assert!(result.is_ok(), "Deploy failed: {:?}", result.err());
 }
@@ -289,7 +289,7 @@ async fn test_archive_with_triple_dash_slug() {
 
     assert!(std::path::Path::new(yaml_file).exists());
 
-    let result = redash_tool::commands::dashboards::archive(&client, vec!["bug-2006698---ccov-build-regression".to_string()]).await;
+    let result = stmo_cli::commands::dashboards::archive(&client, vec!["bug-2006698---ccov-build-regression".to_string()]).await;
 
     assert!(result.is_ok());
     assert!(!std::path::Path::new(yaml_file).exists(), "File should be deleted after archiving");

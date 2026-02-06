@@ -1,4 +1,4 @@
-# redash-tool
+# stmo-cli
 
 Rust CLI for version controlling Redash queries and dashboards.
 
@@ -54,7 +54,7 @@ src/
 
 ## Testing
 
-**Run**: `cargo test` (wiremock for HTTP mocking)
+**Run**: `cargo test` (58 tests with wiremock for HTTP mocking)
 **Locations**: tests/api_integration.rs, src/models.rs, src/commands/*.rs
 
 ## Testing Guidelines

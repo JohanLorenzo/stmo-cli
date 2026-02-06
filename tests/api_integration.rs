@@ -3,7 +3,7 @@
 
 mod common;
 
-use redash_tool::api::RedashClient;
+use stmo_cli::api::RedashClient;
 use wiremock::{MockServer, Mock, ResponseTemplate};
 use wiremock::matchers::{method, path, query_param};
 use common::*;
@@ -499,7 +499,7 @@ async fn test_update_dashboard_success() {
 
     let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
 
-    let dashboard = redash_tool::models::Dashboard {
+    let dashboard = stmo_cli::models::Dashboard {
         id: 2570,
         name: "Updated Dashboard".to_string(),
         slug: "updated-dashboard".to_string(),
@@ -585,12 +585,12 @@ async fn test_create_widget_success() {
 
     let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
 
-    let widget = redash_tool::models::CreateWidget {
+    let widget = stmo_cli::models::CreateWidget {
         dashboard_id: 2570,
         visualization_id: None,
         text: "Test Widget".to_string(),
-        options: redash_tool::models::WidgetOptions {
-            position: redash_tool::models::WidgetPosition {
+        options: stmo_cli::models::WidgetOptions {
+            position: stmo_cli::models::WidgetPosition {
                 col: 0,
                 row: 0,
                 size_x: 3,

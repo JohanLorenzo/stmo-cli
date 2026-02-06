@@ -4,14 +4,14 @@ These templates help you create queries to explore your database schema.
 
 ## Usage
 
-1. Discover your data sources: `cargo run -- data-sources`
+1. Discover your data sources: `stmo-cli data-sources`
 2. Create a new query in Redash (via web UI)
 3. Set the appropriate data source
 4. Copy the SQL template for your database type
 5. Customize dataset/schema names for your environment
 6. Save and run the query in Redash
-7. Use `cargo run -- fetch <query_id>` to track the query locally
-8. Use `cargo run -- execute <query_id>` to run it from the CLI
+7. Use `stmo-cli fetch <query_id>` to track the query locally
+8. Use `stmo-cli execute <query_id>` to run it from the CLI
 
 ## Available Templates
 

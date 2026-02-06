@@ -60,15 +60,15 @@ pub async fn discover(client: &RedashClient) -> Result<()> {
     }
 
     println!("\nUsage:");
-    println!("  cargo run -- dashboards fetch <slug> [<slug>...]");
-    println!("  cargo run -- dashboards fetch firefox-desktop-on-steamos bug-2006698---ccov-build-regression");
+    println!("  stmo-cli dashboards fetch <slug> [<slug>...]");
+    println!("  stmo-cli dashboards fetch firefox-desktop-on-steamos bug-2006698---ccov-build-regression");
 
     Ok(())
 }
 
 pub async fn fetch(client: &RedashClient, dashboard_slugs: Vec<String>) -> Result<()> {
     if dashboard_slugs.is_empty() {
-        anyhow::bail!("No dashboard slugs specified. Use 'dashboards discover' to see available dashboards.\n\nExample:\n  cargo run -- dashboards fetch firefox-desktop-on-steamos bug-2006698---ccov-build-regression");
+        anyhow::bail!("No dashboard slugs specified. Use 'dashboards discover' to see available dashboards.\n\nExample:\n  stmo-cli dashboards fetch firefox-desktop-on-steamos bug-2006698---ccov-build-regression");
     }
 
     fs::create_dir_all("dashboards")
@@ -154,7 +154,7 @@ pub async fn deploy(client: &RedashClient, dashboard_slugs: Vec<String>, all: bo
         println!("Deploying {} specific dashboards...\n", dashboard_slugs.len());
         dashboard_slugs
     } else {
-        anyhow::bail!("No dashboard slugs specified. Use --all to deploy all tracked dashboards, or provide specific slugs.\n\nExamples:\n  cargo run -- dashboards deploy --all\n  cargo run -- dashboards deploy firefox-desktop-on-steamos bug-2006698---ccov-build-regression");
+        anyhow::bail!("No dashboard slugs specified. Use --all to deploy all tracked dashboards, or provide specific slugs.\n\nExamples:\n  stmo-cli dashboards deploy --all\n  stmo-cli dashboards deploy firefox-desktop-on-steamos bug-2006698---ccov-build-regression");
     };
 
     let mut success_count = 0;
@@ -301,7 +301,7 @@ async fn deploy_single_dashboard(client: &RedashClient, dashboard_slug: &str) ->
 
 pub async fn archive(client: &RedashClient, dashboard_slugs: Vec<String>) -> Result<()> {
     if dashboard_slugs.is_empty() {
-        anyhow::bail!("No dashboard slugs specified.\n\nExample:\n  cargo run -- dashboards archive firefox-desktop-on-steamos bug-2006698---ccov-build-regression");
+        anyhow::bail!("No dashboard slugs specified.\n\nExample:\n  stmo-cli dashboards archive firefox-desktop-on-steamos bug-2006698---ccov-build-regression");
     }
 
     println!("Archiving {} dashboards...\n", dashboard_slugs.len());
@@ -365,7 +365,7 @@ pub async fn archive(client: &RedashClient, dashboard_slugs: Vec<String>) -> Res
 
 pub async fn unarchive(client: &RedashClient, dashboard_slugs: Vec<String>) -> Result<()> {
     if dashboard_slugs.is_empty() {
-        anyhow::bail!("No dashboard slugs specified.\n\nExample:\n  cargo run -- dashboards unarchive firefox-desktop-on-steamos bug-2006698---ccov-build-regression");
+        anyhow::bail!("No dashboard slugs specified.\n\nExample:\n  stmo-cli dashboards unarchive firefox-desktop-on-steamos bug-2006698---ccov-build-regression");
     }
 
     println!("Unarchiving {} dashboards...\n", dashboard_slugs.len());
@@ -397,7 +397,7 @@ pub async fn unarchive(client: &RedashClient, dashboard_slugs: Vec<String>) -> R
     if failed_slugs.is_empty() {
         println!("\n✓ All dashboards unarchived successfully");
         println!("\nUse 'dashboards fetch' to download the YAML files:");
-        println!("  cargo run -- dashboards fetch {}", dashboard_slugs.join(" "));
+        println!("  stmo-cli dashboards fetch {}", dashboard_slugs.join(" "));
         Ok(())
     } else {
         println!("\n✓ {success_count} dashboard(s) unarchived successfully");

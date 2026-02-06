@@ -15,7 +15,7 @@ pub async fn discover(client: &RedashClient) -> Result<()> {
         println!("  {} - {}{}{}", query.id, query.name, archived, draft);
     }
 
-    println!("\nUse 'redash-tool init' to create the queries directory.");
+    println!("\nUse 'stmo-cli init' to create the queries directory.");
 
     Ok(())
 }

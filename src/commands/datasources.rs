@@ -45,8 +45,8 @@ pub async fn list_data_sources(client: &RedashClient, format: OutputFormat) -> R
                 println!("{:<6} {:<40} {:<15} {}", ds.id, ds.name, ds.ds_type, status);
             }
 
-            println!("\nUse 'cargo run -- data-sources <id>' to view details.");
-            println!("Use 'cargo run -- data-sources <id> --schema' to view table schema.");
+            println!("\nUse 'stmo-cli data-sources <id>' to view details.");
+            println!("Use 'stmo-cli data-sources <id> --schema' to view table schema.");
         }
     }
 

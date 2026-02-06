@@ -75,7 +75,7 @@ pub async fn fetch(client: &RedashClient, query_ids: Vec<u64>, all: bool) -> Res
         }
         queries
     } else {
-        anyhow::bail!("No query IDs specified. Use --all to fetch tracked queries, or provide specific query IDs.\n\nExamples:\n  cargo run -- fetch --all\n  cargo run -- fetch 123 456 789\n  cargo run -- discover  (to see available queries)");
+        anyhow::bail!("No query IDs specified. Use --all to fetch tracked queries, or provide specific query IDs.\n\nExamples:\n  stmo-cli fetch --all\n  stmo-cli fetch 123 456 789\n  stmo-cli discover  (to see available queries)");
     };
 
     println!("Fetching {} queries...", queries_to_fetch.len());
@@ -125,7 +125,7 @@ pub async fn fetch(client: &RedashClient, query_ids: Vec<u64>, all: bool) -> Res
         }
         let binary_name = std::env::args().next()
             .and_then(|path| std::path::Path::new(&path).file_name().map(|s| s.to_string_lossy().to_string()))
-            .unwrap_or_else(|| "redash-tool".to_string());
+            .unwrap_or_else(|| "stmo-cli".to_string());
         println!("\nConsider cleaning up with: {binary_name} archive --cleanup");
     }
 
