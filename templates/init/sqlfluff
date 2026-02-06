@@ -1,0 +1,15 @@
+[sqlfluff]
+dialect = bigquery
+templater = jinja
+max_line_length = 120
+
+[sqlfluff:templater:jinja]
+apply_dbt_builtins = False
+
+[sqlfluff:templater:jinja:context]
+# Add template variables used in your queries here.
+# This lets sqlfluff parse Jinja-templated SQL for linting.
+# Examples:
+# project = "'autoland', 'mozilla-central'"
+# start_date = "2024-01-01"
+# num_days = 30

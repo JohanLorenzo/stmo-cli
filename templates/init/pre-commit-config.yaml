@@ -1,0 +1,10 @@
+repos:
+- repo: https://github.com/adrienverge/yamllint
+  rev: ""
+  hooks:
+  - id: yamllint
+- repo: https://github.com/sqlfluff/sqlfluff
+  rev: ""
+  hooks:
+  - id: sqlfluff-lint
+    args: [--ignore, templating]
