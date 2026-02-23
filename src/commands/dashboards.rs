@@ -5,7 +5,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::api::RedashClient;
-use crate::models::{CreateWidget, Dashboard, DashboardMetadata, WidgetMetadata};
+use crate::models::{CreateDashboard, CreateWidget, Dashboard, DashboardMetadata, WidgetMetadata};
 
 fn extract_dashboard_slugs_from_path(dashboards_dir: &Path) -> Result<Vec<String>> {
     if !dashboards_dir.exists() {
@@ -186,6 +186,52 @@ pub async fn deploy(client: &RedashClient, dashboard_slugs: Vec<String>, all: bo
     }
 }
 
+fn save_dashboard_yaml(
+    dashboard: &crate::models::Dashboard,
+    old_yaml_path: Option<std::path::PathBuf>,
+) -> Result<()> {
+    use crate::models::Widget;
+
+    let filename = format!("dashboards/{}-{}.yaml", dashboard.id, dashboard.slug);
+
+    let metadata = DashboardMetadata {
+        id: dashboard.id,
+        name: dashboard.name.clone(),
+        slug: dashboard.slug.clone(),
+        user_id: dashboard.user_id,
+        is_draft: dashboard.is_draft,
+        is_archived: dashboard.is_archived,
+        filters_enabled: dashboard.filters_enabled,
+        tags: dashboard.tags.clone(),
+        widgets: dashboard
+            .widgets
+            .iter()
+            .map(|w: &Widget| WidgetMetadata {
+                id: w.id,
+                visualization_id: w.visualization_id,
+                query_id: w.visualization.as_ref().map(|v| v.query.id),
+                visualization_name: w.visualization.as_ref().map(|v| v.name.clone()),
+                text: w.text.clone(),
+                options: w.options.clone(),
+            })
+            .collect(),
+    };
+
+    let yaml_content = serde_yaml::to_string(&metadata)
+        .context("Failed to serialize dashboard metadata")?;
+    fs::write(&filename, &yaml_content)
+        .context(format!("Failed to write {filename}"))?;
+
+    if let Some(old_path) = old_yaml_path
+        && old_path != std::path::PathBuf::from(&filename)
+    {
+        fs::remove_file(&old_path)
+            .context(format!("Failed to delete {}", old_path.display()))?;
+    }
+
+    Ok(())
+}
+
 async fn deploy_single_dashboard(client: &RedashClient, dashboard_slug: &str) -> Result<String> {
     let yaml_files: Vec<_> = fs::read_dir("dashboards")
         .context("Failed to read dashboards directory")?
@@ -217,31 +263,41 @@ async fn deploy_single_dashboard(client: &RedashClient, dashboard_slug: &str) ->
     let local_metadata: DashboardMetadata = serde_yaml::from_str(&yaml_content)
         .context("Failed to parse dashboard YAML")?;
 
-    let server_dashboard = client.get_dashboard(dashboard_slug).await?;
+    let (server_dashboard_id, slug_for_refetch, old_yaml_path) = if local_metadata.id == 0 {
+        let created = client.create_dashboard(&CreateDashboard {
+            name: local_metadata.name.clone(),
+        }).await?;
+        println!("  ✓ Created new dashboard: {} - {}", created.id, created.name);
+        (created.id, created.slug.clone(), Some(yaml_path.clone()))
+    } else {
+        let server_dashboard = client.get_dashboard(dashboard_slug).await?;
 
-    let server_widget_ids: std::collections::HashSet<u64> = server_dashboard
-        .widgets
-        .iter()
-        .map(|w| w.id)
-        .collect();
+        let server_widget_ids: std::collections::HashSet<u64> = server_dashboard
+            .widgets
+            .iter()
+            .map(|w| w.id)
+            .collect();
 
-    let local_widget_ids: std::collections::HashSet<u64> = local_metadata
-        .widgets
-        .iter()
-        .filter(|w| w.id != 0)
-        .map(|w| w.id)
-        .collect();
+        let local_widget_ids: std::collections::HashSet<u64> = local_metadata
+            .widgets
+            .iter()
+            .filter(|w| w.id != 0)
+            .map(|w| w.id)
+            .collect();
 
-    for widget_id in &server_widget_ids {
-        if !local_widget_ids.contains(widget_id) {
-            client.delete_widget(*widget_id).await?;
+        for widget_id in &server_widget_ids {
+            if !local_widget_ids.contains(widget_id) {
+                client.delete_widget(*widget_id).await?;
+            }
         }
-    }
+
+        (server_dashboard.id, dashboard_slug.to_string(), None)
+    };
 
     for widget in &local_metadata.widgets {
         if widget.id == 0 {
             let create_widget = CreateWidget {
-                dashboard_id: local_metadata.id,
+                dashboard_id: server_dashboard_id,
                 visualization_id: widget.visualization_id,
                 text: widget.text.clone(),
                 options: widget.options.clone(),
@@ -251,7 +307,7 @@ async fn deploy_single_dashboard(client: &RedashClient, dashboard_slug: &str) ->
     }
 
     let updated_dashboard = Dashboard {
-        id: local_metadata.id,
+        id: server_dashboard_id,
         name: local_metadata.name.clone(),
         slug: local_metadata.slug.clone(),
         user_id: local_metadata.user_id,
@@ -264,37 +320,9 @@ async fn deploy_single_dashboard(client: &RedashClient, dashboard_slug: &str) ->
 
     client.update_dashboard(&updated_dashboard).await?;
 
-    let refreshed = client.get_dashboard(dashboard_slug).await?;
+    let refreshed = client.get_dashboard(&slug_for_refetch).await?;
 
-    let filename = format!("dashboards/{}-{}.yaml", refreshed.id, refreshed.slug);
-
-    let updated_metadata = DashboardMetadata {
-        id: refreshed.id,
-        name: refreshed.name.clone(),
-        slug: refreshed.slug.clone(),
-        user_id: refreshed.user_id,
-        is_draft: refreshed.is_draft,
-        is_archived: refreshed.is_archived,
-        filters_enabled: refreshed.filters_enabled,
-        tags: refreshed.tags.clone(),
-        widgets: refreshed
-            .widgets
-            .iter()
-            .map(|w| WidgetMetadata {
-                id: w.id,
-                visualization_id: w.visualization_id,
-                query_id: w.visualization.as_ref().map(|v| v.query.id),
-                visualization_name: w.visualization.as_ref().map(|v| v.name.clone()),
-                text: w.text.clone(),
-                options: w.options.clone(),
-            })
-            .collect(),
-    };
-
-    let yaml_content = serde_yaml::to_string(&updated_metadata)
-        .context("Failed to serialize dashboard metadata")?;
-    fs::write(&filename, yaml_content)
-        .context(format!("Failed to write {filename}"))?;
+    save_dashboard_yaml(&refreshed, old_yaml_path)?;
 
     Ok(refreshed.name)
 }

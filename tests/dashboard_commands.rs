@@ -232,6 +232,7 @@ async fn test_deploy_with_triple_dash_slug() {
         .mount(&mock_server)
         .await;
 
+    // Re-fetch uses the original slug
     mock_get_dashboard_with_slug(
         2_006_698,
         "Bug 2006698 - ccov build regression",
@@ -293,4 +294,52 @@ async fn test_archive_with_triple_dash_slug() {
 
     assert!(result.is_ok());
     assert!(!std::path::Path::new(yaml_file).exists(), "File should be deleted after archiving");
+}
+
+#[tokio::test]
+async fn test_deploy_new_dashboard_with_id_zero() {
+    let _guard = get_test_lock().lock().await;
+    let _temp_dir = TempWorkDir::new();
+    let mock_server = wiremock::MockServer::start().await;
+
+    mock_create_dashboard(2621, "My New Dashboard", "my-new-dashboard")
+        .mount(&mock_server)
+        .await;
+
+    mock_update_dashboard(2621, "My New Dashboard")
+        .mount(&mock_server)
+        .await;
+
+    // Re-fetch uses the slug returned by the create response
+    mock_get_dashboard_with_slug(2621, "My New Dashboard", "my-new-dashboard", false)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+
+    std::fs::create_dir_all("dashboards").unwrap();
+
+    let yaml_content = "id: 0
+name: My New Dashboard
+slug: my-new-dashboard
+user_id: 0
+is_draft: true
+is_archived: false
+dashboard_filters_enabled: false
+tags: []
+widgets: []
+";
+    std::fs::write("dashboards/0-my-new-dashboard.yaml", yaml_content).unwrap();
+
+    let result = stmo_cli::commands::dashboards::deploy(&client, vec!["my-new-dashboard".to_string()], false).await;
+
+    assert!(result.is_ok(), "Deploy failed: {:?}", result.err());
+
+    // Old file should be deleted
+    assert!(!std::path::Path::new("dashboards/0-my-new-dashboard.yaml").exists(),
+        "Old 0-*.yaml file should be removed after creation");
+
+    // New file with server-assigned ID should exist
+    assert!(std::path::Path::new("dashboards/2621-my-new-dashboard.yaml").exists(),
+        "New file with server ID should be created");
 }

@@ -1,6 +1,14 @@
 #![allow(clippy::missing_errors_doc)]
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+
+fn deserialize_null_as_empty_vec<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    T: Deserialize<'de>,
+    D: Deserializer<'de>,
+{
+    Ok(Option::deserialize(deserializer)?.unwrap_or_default())
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Query {
@@ -264,7 +272,13 @@ pub struct Dashboard {
     #[serde(rename = "dashboard_filters_enabled")]
     pub filters_enabled: bool,
     pub tags: Vec<String>,
+    #[serde(default, deserialize_with = "deserialize_null_as_empty_vec")]
     pub widgets: Vec<Widget>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CreateDashboard {
+    pub name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

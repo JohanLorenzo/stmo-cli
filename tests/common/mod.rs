@@ -329,6 +329,24 @@ pub fn mock_unarchive_query_forbidden(query_id: u64) -> Mock {
         .respond_with(ResponseTemplate::new(403))
 }
 
+pub fn mock_create_dashboard(id: u64, name: &str, slug: &str) -> Mock {
+    Mock::given(method("POST"))
+        .and(path("/api/dashboards"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({
+                "id": id,
+                "name": name,
+                "slug": slug,
+                "user_id": 530,
+                "is_archived": false,
+                "is_draft": true,
+                "dashboard_filters_enabled": false,
+                "tags": [],
+                "widgets": null
+            })
+        ))
+}
+
 pub fn mock_list_favorite_dashboards(count: u64) -> Mock {
     Mock::given(method("GET"))
         .and(path("/api/dashboards/favorites"))
@@ -374,6 +392,24 @@ pub fn mock_get_dashboard(id: u64, name: &str, is_archived: bool) -> Mock {
 pub fn mock_get_dashboard_with_slug(id: u64, name: &str, slug: &str, is_archived: bool) -> Mock {
     Mock::given(method("GET"))
         .and(path(format!("/api/dashboards/{slug}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({
+                "id": id,
+                "name": name,
+                "slug": slug,
+                "user_id": 530,
+                "is_archived": is_archived,
+                "is_draft": false,
+                "dashboard_filters_enabled": false,
+                "tags": [],
+                "widgets": []
+            })
+        ))
+}
+
+pub fn mock_get_dashboard_by_id(id: u64, name: &str, slug: &str, is_archived: bool) -> Mock {
+    Mock::given(method("GET"))
+        .and(path(format!("/api/dashboards/{id}")))
         .respond_with(ResponseTemplate::new(200).set_body_json(
             serde_json::json!({
                 "id": id,

@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result};
 use reqwest::{Client, header};
-use crate::models::{CreateQuery, CreateWidget, Dashboard, DashboardsResponse, DashboardSummary, DataSource, DataSourceSchema, QueriesResponse, Query};
+use crate::models::{CreateDashboard, CreateQuery, CreateWidget, Dashboard, DashboardsResponse, DashboardSummary, DataSource, DataSourceSchema, QueriesResponse, Query};
 
 pub struct RedashClient {
     client: Client,
@@ -375,6 +375,26 @@ impl RedashClient {
             .json()
             .await
             .context("Failed to parse unarchive response")
+    }
+
+    pub async fn create_dashboard(&self, dashboard: &CreateDashboard) -> Result<Dashboard> {
+        let url = format!("{}/api/dashboards", self.base_url);
+        let response = self.client
+            .post(&url)
+            .json(dashboard)
+            .send()
+            .await
+            .context("Failed to create dashboard")?;
+
+        let status = response.status();
+        if !status.is_success() {
+            anyhow::bail!("HTTP {}: {}", status.as_u16(), status.canonical_reason().unwrap_or("Unknown error"));
+        }
+
+        response
+            .json()
+            .await
+            .context("Failed to parse dashboard create response")
     }
 
     pub async fn list_favorite_dashboards(&self, page: u32, page_size: u32) -> Result<DashboardsResponse> {
