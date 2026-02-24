@@ -15,6 +15,10 @@ Rust CLI for version controlling Redash queries and dashboards.
 - Rust 1.89+ with 2024 edition support
 - Redash API key from https://sql.telemetry.mozilla.org
 
+## Claude Integration
+
+stmo-cli works great with the [mozdata-claude-plugin](https://github.com/akkomar/mozdata-claude-plugin?tab=readme-ov-file#installation), which provides Mozilla telemetry expertise and discovery directly in Claude.
+
 ## Installation
 
 ```bash

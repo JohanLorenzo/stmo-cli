@@ -10,6 +10,8 @@ This repository contains version-controlled Redash queries and dashboards manage
 
 ## Data Exploration (AI Assistants)
 
+**Setup** (first time only): Install the [mozdata-claude-plugin](https://github.com/akkomar/mozdata-claude-plugin?tab=readme-ov-file#installation) for Mozilla telemetry expertise and discovery.
+
 **IMPORTANT**: Clean up after exploration. Archive any queries you fetch.
 
 1. **Find data sources**: `stmo-cli data-sources`
