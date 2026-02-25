@@ -63,6 +63,12 @@ sqlfluff (BigQuery) enforced via pre-commit. Match existing `queries/*.sql` form
 2. `stmo-cli deploy` → creates query in Redash
 3. `stmo-cli fetch <new-id>` → sync with assigned ID
 
+## Dashboard Creation
+
+1. Create `dashboards/0-{slug}.yaml` with `id: 0`
+2. `stmo-cli dashboards deploy {slug}` → creates dashboard in Redash
+3. Local file is automatically renamed to `{new-id}-{server-slug}.yaml`
+
 ## Query/Dashboard Authoring
 
 ### Before Deploying SQL
