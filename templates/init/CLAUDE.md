@@ -4,6 +4,7 @@ This repository contains version-controlled Redash queries and dashboards manage
 
 ## Quick Reference
 
+**Install**: `cargo install stmo-cli`
 **Commands**: `discover` `fetch` `deploy` `execute` `data-sources` `archive` `unarchive` `dashboards`
 **File Naming**: `queries/{id}-{slug}.sql` + `queries/{id}-{slug}.yaml`, `dashboards/{id}-{slug}.yaml`
 **Env Vars**: `REDASH_API_KEY` (required), `REDASH_URL` (optional, defaults to sql.telemetry.mozilla.org)
