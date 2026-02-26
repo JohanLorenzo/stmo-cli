@@ -9,8 +9,8 @@ readme = "README.md"
 keywords = ["redash", "cli", "sql", "version-control"]
 categories = ["command-line-utilities"]
 exclude = [
-    "CLAUDE.md",
-    ".pre-commit-config.yaml",
+    "/CLAUDE.md",
+    "/.pre-commit-config.yaml",
 ]
 
 [dependencies]
