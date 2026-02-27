@@ -29,7 +29,7 @@ To restore: `stmo-cli unarchive <id> && stmo-cli fetch <id>`
 ### Queries
 **discover**: List all queries (IDs + names)
 **fetch**: Download queries (`--all` for tracked, or `<ids>`)
-**deploy**: Upload changes (`--all` for everything)
+**deploy**: Upload changes (no args = git-changed files only, `--all` for everything, or `<ids>`)
 **execute**: Run query (`--param key=val`, `--format table|json`, `--interactive`)
 **data-sources**: List sources, `<id> --schema` for tables
 **archive**: Archive queries + delete local (`<ids>` or `--cleanup`)
@@ -61,8 +61,8 @@ sqlfluff (BigQuery) enforced via pre-commit. Match existing `queries/*.sql` form
 ## Query Creation
 
 1. Create `0-{slug}.sql` + `0-{slug}.yaml` with `id: 0`
-2. `stmo-cli deploy` → creates query in Redash
-3. `stmo-cli fetch <new-id>` → sync with assigned ID
+2. `stmo-cli deploy` → creates query in Redash and auto-renames local files to `{new-id}-{slug}.*`
+3. Commit the renamed `{new-id}-{slug}.*` files — **never commit `0-*.` files**
 
 ## Dashboard Creation
 
