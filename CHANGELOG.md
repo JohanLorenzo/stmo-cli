@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.0] - 2026-02-27
+
+### Features
+- Auto-populate `parameterMappings` with `type: dashboard-level` for new widgets during dashboard deploy
+- Auto-enable `dashboard_filters_enabled` when any new widget has parameters
+
 ## [0.2.0] - 2026-02-27
 
 ### Features
