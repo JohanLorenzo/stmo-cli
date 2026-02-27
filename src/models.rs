@@ -379,6 +379,21 @@ pub struct CreateWidget {
     pub options: WidgetOptions,
 }
 
+#[must_use]
+pub fn build_dashboard_level_parameter_mappings(parameters: &[Parameter]) -> serde_json::Value {
+    let mut mappings = serde_json::Map::new();
+    for param in parameters {
+        mappings.insert(param.name.clone(), serde_json::json!({
+            "mapTo": param.name,
+            "name": param.name,
+            "title": "",
+            "type": "dashboard-level",
+            "value": null,
+        }));
+    }
+    serde_json::Value::Object(mappings)
+}
+
 #[cfg(test)]
 #[allow(clippy::missing_errors_doc)]
 #[allow(clippy::unnecessary_literal_unwrap)]
@@ -861,5 +876,56 @@ options:
         assert_eq!(response.results[1].id, 2558);
         assert_eq!(response.results[1].slug, "dashboard-2");
         assert!(response.results[1].is_draft);
+    }
+
+    #[test]
+    fn test_build_dashboard_level_parameter_mappings_empty() {
+        let result = build_dashboard_level_parameter_mappings(&[]);
+        assert_eq!(result, serde_json::json!({}));
+    }
+
+    #[test]
+    fn test_build_dashboard_level_parameter_mappings_with_params() {
+        let params = vec![
+            Parameter {
+                name: "channel".to_string(),
+                title: "Channel".to_string(),
+                param_type: "enum".to_string(),
+                value: None,
+                enum_options: None,
+                query_id: None,
+                multi_values_options: None,
+            },
+            Parameter {
+                name: "date".to_string(),
+                title: "Date".to_string(),
+                param_type: "date".to_string(),
+                value: None,
+                enum_options: None,
+                query_id: None,
+                multi_values_options: None,
+            },
+        ];
+
+        let result = build_dashboard_level_parameter_mappings(&params);
+
+        let expected = serde_json::json!({
+            "channel": {
+                "mapTo": "channel",
+                "name": "channel",
+                "title": "",
+                "type": "dashboard-level",
+                "value": null,
+            },
+            "date": {
+                "mapTo": "date",
+                "name": "date",
+                "title": "",
+                "type": "dashboard-level",
+                "value": null,
+            },
+        });
+
+        assert_eq!(result, expected);
     }
 }

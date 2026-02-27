@@ -143,6 +143,7 @@ async fn deploy_visualizations(
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 pub async fn deploy(client: &RedashClient, query_ids: Vec<u64>, all: bool) -> Result<()> {
     let all_queries = get_all_query_metadata()?;
 

@@ -1,11 +1,15 @@
 #![allow(clippy::missing_errors_doc)]
 
 use anyhow::{Context, Result};
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
 use crate::api::RedashClient;
-use crate::models::{CreateDashboard, CreateWidget, Dashboard, DashboardMetadata, WidgetMetadata};
+use crate::models::{
+    build_dashboard_level_parameter_mappings, CreateDashboard, CreateWidget, Dashboard,
+    DashboardMetadata, Query, WidgetMetadata,
+};
 
 fn extract_dashboard_slugs_from_path(dashboards_dir: &Path) -> Result<Vec<String>> {
     if !dashboards_dir.exists() {
@@ -232,6 +236,29 @@ fn save_dashboard_yaml(
     Ok(())
 }
 
+async fn auto_populate_parameter_mappings(
+    client: &RedashClient,
+    query_id: u64,
+    existing_mappings: Option<&serde_json::Value>,
+    query_cache: &mut HashMap<u64, Query>,
+) -> Result<Option<serde_json::Value>> {
+    let should_build = match existing_mappings {
+        None => true,
+        Some(serde_json::Value::Object(m)) => m.is_empty(),
+        Some(_) => false,
+    };
+    if !should_build {
+        return Ok(None);
+    }
+    if let std::collections::hash_map::Entry::Vacant(e) = query_cache.entry(query_id) {
+        e.insert(client.get_query(query_id).await?);
+    }
+    Ok(query_cache
+        .get(&query_id)
+        .filter(|q| !q.options.parameters.is_empty())
+        .map(|q| build_dashboard_level_parameter_mappings(&q.options.parameters)))
+}
+
 async fn deploy_single_dashboard(client: &RedashClient, dashboard_slug: &str) -> Result<String> {
     let yaml_files: Vec<_> = fs::read_dir("dashboards")
         .context("Failed to read dashboards directory")?
@@ -295,14 +322,31 @@ async fn deploy_single_dashboard(client: &RedashClient, dashboard_slug: &str) ->
         (server_dashboard.id, dashboard_slug.to_string(), None)
     };
 
+    let mut query_cache: HashMap<u64, Query> = HashMap::new();
+    let mut any_widget_has_params = false;
+
     for widget in &local_metadata.widgets {
         if widget.id == 0 {
+            let mut options = widget.options.clone();
+
+            if let Some(query_id) = widget.query_id
+                && let Some(mappings) = auto_populate_parameter_mappings(
+                    client,
+                    query_id,
+                    options.parameter_mappings.as_ref(),
+                    &mut query_cache,
+                ).await?
+            {
+                options.parameter_mappings = Some(mappings);
+                any_widget_has_params = true;
+            }
+
             let create_widget = CreateWidget {
                 dashboard_id: server_dashboard_id,
                 visualization_id: widget.visualization_id,
                 text: widget.text.clone(),
                 width: 1,
-                options: widget.options.clone(),
+                options,
             };
             client.create_widget(&create_widget).await?;
         }
@@ -315,7 +359,7 @@ async fn deploy_single_dashboard(client: &RedashClient, dashboard_slug: &str) ->
         user_id: local_metadata.user_id,
         is_archived: local_metadata.is_archived,
         is_draft: local_metadata.is_draft,
-        filters_enabled: local_metadata.filters_enabled,
+        filters_enabled: any_widget_has_params || local_metadata.filters_enabled,
         tags: local_metadata.tags.clone(),
         widgets: vec![],
     };

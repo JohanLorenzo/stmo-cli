@@ -347,3 +347,100 @@ widgets: []
     assert!(std::path::Path::new("dashboards/2621-my-new-dashboard.yaml").exists(),
         "New file with server ID should be created");
 }
+
+#[tokio::test]
+async fn test_deploy_auto_populates_parameter_mappings() {
+    let _guard = get_test_lock().lock().await;
+    let _temp_dir = TempWorkDir::new();
+    let mock_server = wiremock::MockServer::start().await;
+
+    let dashboard_id = 2570_u64;
+    let query_id = 12345_u64;
+    let slug = "my-parameterized-dashboard";
+
+    mock_get_dashboard_with_slug(dashboard_id, "My Parameterized Dashboard", slug, false)
+        .mount(&mock_server)
+        .await;
+
+    mock_get_query_with_parameters(query_id, "My Query", &[("channel", "enum"), ("date", "date")])
+        .mount(&mock_server)
+        .await;
+
+    mock_create_widget(dashboard_id, 99001)
+        .mount(&mock_server)
+        .await;
+
+    mock_update_dashboard(dashboard_id, "My Parameterized Dashboard")
+        .mount(&mock_server)
+        .await;
+
+    mock_get_dashboard_with_slug(dashboard_id, "My Parameterized Dashboard", slug, false)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+
+    std::fs::create_dir_all("dashboards").unwrap();
+
+    let yaml_content = format!("id: {dashboard_id}
+name: My Parameterized Dashboard
+slug: {slug}
+user_id: 530
+is_draft: false
+is_archived: false
+dashboard_filters_enabled: false
+tags: []
+widgets:
+  - id: 0
+    visualization_id: 279588
+    query_id: {query_id}
+    visualization_name: My Viz
+    text: ''
+    options:
+      position:
+        col: 0
+        row: 0
+        sizeX: 3
+        sizeY: 8
+");
+    std::fs::write(format!("dashboards/{dashboard_id}-{slug}.yaml"), yaml_content).unwrap();
+
+    let result = stmo_cli::commands::dashboards::deploy(
+        &client,
+        vec![slug.to_string()],
+        false,
+    ).await;
+
+    assert!(result.is_ok(), "Deploy failed: {:?}", result.err());
+
+    let received = mock_server.received_requests().await.unwrap();
+
+    let widget_create_req = received
+        .iter()
+        .find(|r| r.method.as_str() == "POST" && r.url.path() == "/api/widgets")
+        .expect("Expected widget create request");
+
+    let body: serde_json::Value = serde_json::from_slice(&widget_create_req.body).unwrap();
+    let param_mappings = &body["options"]["parameterMappings"];
+
+    assert!(param_mappings.is_object(), "parameterMappings should be an object, got: {param_mappings}");
+    assert_eq!(param_mappings["channel"]["type"], "dashboard-level");
+    assert_eq!(param_mappings["channel"]["mapTo"], "channel");
+    assert_eq!(param_mappings["date"]["type"], "dashboard-level");
+    assert_eq!(param_mappings["date"]["mapTo"], "date");
+
+    let dashboard_update_req = received
+        .iter()
+        .find(|r| {
+            r.method.as_str() == "POST"
+                && r.url.path() == format!("/api/dashboards/{dashboard_id}")
+        })
+        .expect("Expected dashboard update request");
+
+    let update_body: serde_json::Value =
+        serde_json::from_slice(&dashboard_update_req.body).unwrap();
+    assert_eq!(
+        update_body["dashboard_filters_enabled"], true,
+        "dashboard_filters_enabled should be true when widgets have parameters"
+    );
+}

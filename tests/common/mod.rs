@@ -271,6 +271,40 @@ pub fn mock_get_query(query_id: u64, name: &str, is_archived: bool) -> Mock {
         ))
 }
 
+pub fn mock_get_query_with_parameters(query_id: u64, name: &str, parameters: &[(&str, &str)]) -> Mock {
+    let params: Vec<serde_json::Value> = parameters
+        .iter()
+        .map(|(param_name, param_type)| {
+            serde_json::json!({
+                "name": param_name,
+                "title": param_name,
+                "type": param_type,
+            })
+        })
+        .collect();
+
+    Mock::given(method("GET"))
+        .and(path(format!("/api/queries/{query_id}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({
+                "id": query_id,
+                "name": name,
+                "description": null,
+                "query": "SELECT 1",
+                "data_source_id": 63,
+                "user": null,
+                "schedule": null,
+                "options": {"parameters": params},
+                "visualizations": [],
+                "tags": null,
+                "is_archived": false,
+                "is_draft": false,
+                "updated_at": "2026-01-21T10:00:00",
+                "created_at": "2026-01-21T10:00:00"
+            })
+        ))
+}
+
 pub fn mock_get_query_with_table_viz(query_id: u64, name: &str) -> Mock {
     Mock::given(method("GET"))
         .and(path(format!("/api/queries/{query_id}")))
