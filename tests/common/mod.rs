@@ -472,15 +472,15 @@ pub fn mock_update_dashboard(id: u64, name: &str) -> Mock {
         ))
 }
 
-pub fn mock_archive_dashboard(id: u64) -> Mock {
+pub fn mock_archive_dashboard(slug: &str) -> Mock {
     Mock::given(method("DELETE"))
-        .and(path(format!("/api/dashboards/{id}")))
-        .respond_with(ResponseTemplate::new(204))
+        .and(path(format!("/api/dashboards/{slug}")))
+        .respond_with(ResponseTemplate::new(200))
 }
 
-pub fn mock_archive_dashboard_not_found(id: u64) -> Mock {
+pub fn mock_archive_dashboard_not_found(slug: &str) -> Mock {
     Mock::given(method("DELETE"))
-        .and(path(format!("/api/dashboards/{id}")))
+        .and(path(format!("/api/dashboards/{slug}")))
         .respond_with(ResponseTemplate::new(404))
 }
 

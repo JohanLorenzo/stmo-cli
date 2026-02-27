@@ -278,7 +278,7 @@ async fn test_archive_with_triple_dash_slug() {
         .mount(&mock_server)
         .await;
 
-    mock_archive_dashboard(2_006_698)
+    mock_archive_dashboard("bug-2006698---ccov-build-regression")
         .mount(&mock_server)
         .await;
 

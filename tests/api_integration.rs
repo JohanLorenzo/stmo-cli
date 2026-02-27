@@ -521,12 +521,12 @@ async fn test_update_dashboard_success() {
 async fn test_archive_dashboard_success() {
     let mock_server = MockServer::start().await;
 
-    mock_archive_dashboard(2570)
+    mock_archive_dashboard("test-dashboard")
         .mount(&mock_server)
         .await;
 
     let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
-    let result = client.archive_dashboard(2570).await;
+    let result = client.archive_dashboard("test-dashboard").await;
 
     assert!(result.is_ok());
 }
@@ -535,12 +535,12 @@ async fn test_archive_dashboard_success() {
 async fn test_archive_dashboard_not_found() {
     let mock_server = MockServer::start().await;
 
-    mock_archive_dashboard_not_found(999)
+    mock_archive_dashboard_not_found("nonexistent-dashboard")
         .mount(&mock_server)
         .await;
 
     let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
-    let result = client.archive_dashboard(999).await;
+    let result = client.archive_dashboard("nonexistent-dashboard").await;
 
     assert!(result.is_err());
 }

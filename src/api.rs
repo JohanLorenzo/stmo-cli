@@ -457,13 +457,13 @@ impl RedashClient {
             .context("Failed to parse dashboard update response")
     }
 
-    pub async fn archive_dashboard(&self, dashboard_id: u64) -> Result<()> {
-        let url = format!("{}/api/dashboards/{dashboard_id}", self.base_url);
+    pub async fn archive_dashboard(&self, slug: &str) -> Result<()> {
+        let url = format!("{}/api/dashboards/{slug}", self.base_url);
         let response = self.client
             .delete(&url)
             .send()
             .await
-            .context(format!("Failed to archive dashboard {dashboard_id}"))?;
+            .context(format!("Failed to archive dashboard {slug}"))?;
 
         let status = response.status();
         if !status.is_success() {

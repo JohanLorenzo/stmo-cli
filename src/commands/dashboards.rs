@@ -342,7 +342,7 @@ pub async fn archive(client: &RedashClient, dashboard_slugs: Vec<String>) -> Res
     for slug in &dashboard_slugs {
         match client.get_dashboard(slug).await {
             Ok(dashboard) => {
-                match client.archive_dashboard(dashboard.id).await {
+                match client.archive_dashboard(slug).await {
                     Ok(()) => {
                         let yaml_files: Vec<_> = fs::read_dir("dashboards")
                             .context("Failed to read dashboards directory")?
