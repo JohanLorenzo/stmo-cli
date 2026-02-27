@@ -426,7 +426,8 @@ impl RedashClient {
 
         let status = response.status();
         if !status.is_success() {
-            anyhow::bail!("HTTP {}: {}", status.as_u16(), status.canonical_reason().unwrap_or("Unknown error"));
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!("HTTP {}: {} — {body}", status.as_u16(), status.canonical_reason().unwrap_or("Unknown error"));
         }
 
         response
@@ -446,7 +447,8 @@ impl RedashClient {
 
         let status = response.status();
         if !status.is_success() {
-            anyhow::bail!("HTTP {}: {}", status.as_u16(), status.canonical_reason().unwrap_or("Unknown error"));
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!("HTTP {}: {} — {body}", status.as_u16(), status.canonical_reason().unwrap_or("Unknown error"));
         }
 
         response
@@ -504,7 +506,8 @@ impl RedashClient {
 
         let status = response.status();
         if !status.is_success() {
-            anyhow::bail!("HTTP {}: {}", status.as_u16(), status.canonical_reason().unwrap_or("Unknown error"));
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!("HTTP {}: {} — {body}", status.as_u16(), status.canonical_reason().unwrap_or("Unknown error"));
         }
 
         response
