@@ -589,6 +589,7 @@ async fn test_create_widget_success() {
         dashboard_id: 2570,
         visualization_id: None,
         text: "Test Widget".to_string(),
+        width: 1,
         options: stmo_cli::models::WidgetOptions {
             position: stmo_cli::models::WidgetPosition {
                 col: 0,

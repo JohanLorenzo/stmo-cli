@@ -300,6 +300,7 @@ async fn deploy_single_dashboard(client: &RedashClient, dashboard_slug: &str) ->
                 dashboard_id: server_dashboard_id,
                 visualization_id: widget.visualization_id,
                 text: widget.text.clone(),
+                width: 1,
                 options: widget.options.clone(),
             };
             client.create_widget(&create_widget).await?;

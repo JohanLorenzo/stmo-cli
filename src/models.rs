@@ -374,8 +374,8 @@ pub struct CreateWidget {
     pub dashboard_id: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub visualization_id: Option<u64>,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub text: String,
+    pub width: u32,
     pub options: WidgetOptions,
 }
 
@@ -809,6 +809,7 @@ options:
             dashboard_id: 2570,
             visualization_id: Some(279_588),
             text: String::new(),
+            width: 1,
             options: WidgetOptions {
                 position: WidgetPosition {
                     col: 0,
