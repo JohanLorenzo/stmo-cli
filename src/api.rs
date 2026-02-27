@@ -532,6 +532,23 @@ impl RedashClient {
         Ok(())
     }
 
+    pub async fn favorite_dashboard(&self, slug: &str) -> Result<()> {
+        let url = format!("{}/api/dashboards/{slug}/favorite", self.base_url);
+        let response = self.client
+            .post(&url)
+            .json(&serde_json::json!({}))
+            .send()
+            .await
+            .context(format!("Failed to favorite dashboard {slug}"))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            anyhow::bail!("HTTP {}: {}", status.as_u16(), status.canonical_reason().unwrap_or("Unknown error"));
+        }
+
+        Ok(())
+    }
+
     pub async fn fetch_favorite_dashboards(&self) -> Result<Vec<DashboardSummary>> {
         let mut all_dashboards = Vec::new();
         let mut page = 1;

@@ -306,6 +306,10 @@ async fn test_deploy_new_dashboard_with_id_zero() {
         .mount(&mock_server)
         .await;
 
+    mock_favorite_dashboard("my-new-dashboard")
+        .mount(&mock_server)
+        .await;
+
     mock_update_dashboard(2621, "My New Dashboard")
         .mount(&mock_server)
         .await;

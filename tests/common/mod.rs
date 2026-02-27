@@ -551,6 +551,12 @@ pub fn mock_refresh_query_bad_request(query_id: u64, error_message: &str) -> Moc
         )
 }
 
+pub fn mock_favorite_dashboard(slug: &str) -> Mock {
+    Mock::given(method("POST"))
+        .and(path(format!("/api/dashboards/{slug}/favorite")))
+        .respond_with(ResponseTemplate::new(200))
+}
+
 pub fn mock_refresh_query_forbidden(query_id: u64) -> Mock {
     Mock::given(method("POST"))
         .and(path(format!("/api/queries/{query_id}/results")))

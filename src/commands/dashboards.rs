@@ -268,6 +268,7 @@ async fn deploy_single_dashboard(client: &RedashClient, dashboard_slug: &str) ->
             name: local_metadata.name.clone(),
         }).await?;
         println!("  ✓ Created new dashboard: {} - {}", created.id, created.name);
+        client.favorite_dashboard(&created.slug).await?;
         (created.id, created.slug.clone(), Some(yaml_path.clone()))
     } else {
         let server_dashboard = client.get_dashboard(dashboard_slug).await?;
