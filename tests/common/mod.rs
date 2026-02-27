@@ -329,6 +329,29 @@ pub fn mock_unarchive_query_forbidden(query_id: u64) -> Mock {
         .respond_with(ResponseTemplate::new(403))
 }
 
+pub fn mock_create_query(id: u64, name: &str) -> Mock {
+    Mock::given(method("POST"))
+        .and(path("/api/queries"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({
+                "id": id,
+                "name": name,
+                "description": null,
+                "query": "SELECT 1",
+                "data_source_id": 63,
+                "user": null,
+                "schedule": null,
+                "options": {"parameters": []},
+                "visualizations": [],
+                "tags": null,
+                "is_archived": false,
+                "is_draft": false,
+                "updated_at": "2026-01-21T10:00:00",
+                "created_at": "2026-01-21T10:00:00"
+            })
+        ))
+}
+
 pub fn mock_create_dashboard(id: u64, name: &str, slug: &str) -> Mock {
     Mock::given(method("POST"))
         .and(path("/api/dashboards"))

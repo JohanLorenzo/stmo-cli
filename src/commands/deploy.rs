@@ -208,9 +208,33 @@ pub async fn deploy(client: &RedashClient, query_ids: Vec<u64>, all: bool) -> Re
                 is_draft: false,
             };
             let created = client.create_query(&create_query).await?;
-            println!("  ✓ Created new query: {} - {name}", created.id);
-            println!("    Update the YAML file with the new ID: {}", created.id);
-            created
+            let fetched = client.get_query(created.id).await?;
+            let new_slug = slugify(&fetched.name);
+            let new_base = format!("queries/{}-{new_slug}", fetched.id);
+            fs::write(format!("{new_base}.sql"), &fetched.sql)
+                .context(format!("Failed to write {new_base}.sql"))?;
+            let new_metadata = crate::models::QueryMetadata {
+                id: fetched.id,
+                name: fetched.name.clone(),
+                description: fetched.description.clone(),
+                data_source_id: fetched.data_source_id,
+                user_id: fetched.user.as_ref().map(|u| u.id),
+                schedule: fetched.schedule.clone(),
+                options: fetched.options.clone(),
+                visualizations: fetched.visualizations.clone(),
+                tags: fetched.tags.clone(),
+            };
+            let yaml_content = serde_yaml::to_string(&new_metadata)
+                .context("Failed to serialize query metadata")?;
+            fs::write(format!("{new_base}.yaml"), yaml_content)
+                .context(format!("Failed to write {new_base}.yaml"))?;
+            fs::remove_file(&sql_path)
+                .context(format!("Failed to delete {sql_path}"))?;
+            fs::remove_file(&yaml_path)
+                .context(format!("Failed to delete {yaml_path}"))?;
+            println!("  ✓ Created new query: {} - {name}", fetched.id);
+            println!("    Renamed: 0-{slug}.* → {}-{new_slug}.*", fetched.id);
+            fetched
         } else {
             let query = Query {
                 id: metadata.id,
