@@ -271,6 +271,51 @@ pub fn mock_get_query(query_id: u64, name: &str, is_archived: bool) -> Mock {
         ))
 }
 
+pub fn mock_get_query_with_table_viz(query_id: u64, name: &str) -> Mock {
+    Mock::given(method("GET"))
+        .and(path(format!("/api/queries/{query_id}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({
+                "id": query_id,
+                "name": name,
+                "description": null,
+                "query": "SELECT 1",
+                "data_source_id": 63,
+                "user": null,
+                "schedule": null,
+                "options": {"parameters": []},
+                "visualizations": [
+                    {
+                        "id": 99999,
+                        "name": "Table",
+                        "type": "TABLE",
+                        "options": {},
+                        "description": null
+                    }
+                ],
+                "tags": null,
+                "is_archived": false,
+                "is_draft": false,
+                "updated_at": "2026-01-21T10:00:00",
+                "created_at": "2026-01-21T10:00:00"
+            })
+        ))
+}
+
+pub fn mock_update_visualization(viz_id: u64) -> Mock {
+    Mock::given(method("POST"))
+        .and(path(format!("/api/visualizations/{viz_id}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({
+                "id": viz_id,
+                "name": "Table",
+                "type": "TABLE",
+                "options": {},
+                "description": null
+            })
+        ))
+}
+
 pub fn mock_archive_query(query_id: u64, name: &str) -> Mock {
     Mock::given(method("POST"))
         .and(path(format!("/api/queries/{query_id}")))

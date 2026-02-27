@@ -49,7 +49,7 @@ async fn test_deploy_new_query_with_id_zero() {
         .mount(&mock_server)
         .await;
 
-    mock_get_query(42, "Test Query", false)
+    mock_get_query_with_table_viz(42, "Test Query")
         .mount(&mock_server)
         .await;
 
@@ -87,4 +87,40 @@ async fn test_deploy_new_query_with_id_zero() {
 
     let yaml_content = std::fs::read_to_string("queries/42-test-query.yaml").unwrap();
     assert!(yaml_content.contains("id: 42"), "YAML should contain the new ID");
+}
+
+#[tokio::test]
+async fn test_deploy_new_query_does_not_duplicate_auto_created_table() {
+    let _guard = get_test_lock().lock().await;
+    let _temp_dir = TempWorkDir::new();
+    let mock_server = wiremock::MockServer::start().await;
+
+    mock_create_query(42, "Test Query")
+        .mount(&mock_server)
+        .await;
+
+    mock_get_query_with_table_viz(42, "Test Query")
+        .mount(&mock_server)
+        .await;
+
+    mock_update_visualization(99999)
+        .expect(1)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+
+    std::fs::create_dir_all("queries").unwrap();
+    std::fs::write("queries/0-test-query.sql", "SELECT 1").unwrap();
+    std::fs::write(
+        "queries/0-test-query.yaml",
+        "id: 0\nname: Test Query\ndescription: null\ndata_source_id: 63\nschedule: null\noptions:\n  parameters: []\nvisualizations:\n  - id: 0\n    name: Table\n    type: TABLE\n    options: {}\n    description: null\ntags: null\n",
+    )
+    .unwrap();
+
+    let result = stmo_cli::commands::deploy::deploy(&client, vec![0], false).await;
+
+    assert!(result.is_ok(), "Deploy failed: {:?}", result.err());
+
+    mock_server.verify().await;
 }

@@ -106,18 +106,36 @@ async fn deploy_visualizations(
     client: &RedashClient,
     query_id: u64,
     visualizations: &[crate::models::Visualization],
+    server_visualizations: &[crate::models::Visualization],
 ) -> Result<()> {
+    let mut matched_server_ids: HashSet<u64> = HashSet::new();
     for viz in visualizations {
         if viz.id == 0 {
-            let viz_to_create = crate::models::CreateVisualization {
-                query_id,
-                name: viz.name.clone(),
-                viz_type: viz.viz_type.clone(),
-                options: viz.options.clone(),
-                description: viz.description.clone(),
-            };
-            let created = client.create_visualization(query_id, &viz_to_create).await?;
-            println!("    ✓ Created visualization: {} (ID: {})", created.name, created.id);
+            let server_match = server_visualizations
+                .iter()
+                .find(|sv| sv.viz_type == viz.viz_type && !matched_server_ids.contains(&sv.id));
+            if let Some(server_viz) = server_match {
+                matched_server_ids.insert(server_viz.id);
+                let viz_to_update = crate::models::Visualization {
+                    id: server_viz.id,
+                    name: viz.name.clone(),
+                    viz_type: viz.viz_type.clone(),
+                    options: viz.options.clone(),
+                    description: viz.description.clone(),
+                };
+                client.update_visualization(&viz_to_update).await?;
+                println!("    ✓ Updated visualization: {} (ID: {})", viz_to_update.name, server_viz.id);
+            } else {
+                let viz_to_create = crate::models::CreateVisualization {
+                    query_id,
+                    name: viz.name.clone(),
+                    viz_type: viz.viz_type.clone(),
+                    options: viz.options.clone(),
+                    description: viz.description.clone(),
+                };
+                let created = client.create_visualization(query_id, &viz_to_create).await?;
+                println!("    ✓ Created visualization: {} (ID: {})", created.name, created.id);
+            }
         } else {
             client.update_visualization(viz).await?;
         }
@@ -257,7 +275,7 @@ pub async fn deploy(client: &RedashClient, query_ids: Vec<u64>, all: bool) -> Re
             result
         };
 
-        deploy_visualizations(client, result_query.id, &metadata.visualizations).await?;
+        deploy_visualizations(client, result_query.id, &metadata.visualizations, &result_query.visualizations).await?;
     }
 
     println!("\n✓ All resources deployed successfully");
