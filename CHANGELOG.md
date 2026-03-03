@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0] - 2026-03-03
+
+### Features
+- Add `--version` flag to CLI
+- Add automatic update check on invocation (checks crates.io, cached for 24h)
+- Add `update` subcommand to update stmo-cli via `cargo install`
+- Sort visualizations by ID and rewrite YAML on deploy
+
 ## [0.3.0] - 2026-02-27
 
 ### Features
