@@ -6,6 +6,7 @@ pub mod execute;
 pub mod datasources;
 pub mod archive;
 pub mod dashboards;
+pub mod update;
 
 use anyhow::{bail, Result};
 

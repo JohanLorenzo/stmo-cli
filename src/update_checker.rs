@@ -92,6 +92,7 @@ pub fn is_newer(latest: &str, current: &str) -> bool {
     latest > current
 }
 
+#[allow(dead_code)]
 pub async fn check_for_update_from(base_url: &str) -> Option<String> {
     let latest = fetch_latest_version(base_url).await?;
     if is_newer(&latest, CURRENT_VERSION) {

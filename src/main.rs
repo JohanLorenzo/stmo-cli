@@ -1,6 +1,7 @@
 mod api;
 mod commands;
 mod models;
+mod update_checker;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
@@ -94,6 +95,9 @@ enum Commands {
         #[command(subcommand)]
         command: DashboardCommands,
     },
+
+    #[command(about = "Update stmo-cli to the latest version")]
+    Update,
 }
 
 #[derive(Subcommand)]
@@ -135,6 +139,12 @@ async fn main() -> Result<()> {
     if let Commands::Init = cli.command {
         return commands::init::init();
     }
+
+    if let Commands::Update = cli.command {
+        return commands::update::update();
+    }
+
+    update_checker::check_and_auto_update().await;
 
     let api_key = std::env::var("REDASH_API_KEY")
         .context("REDASH_API_KEY environment variable not set")?;
@@ -195,6 +205,7 @@ async fn main() -> Result<()> {
             DashboardCommands::Archive { slugs } => commands::dashboards::archive(&client, slugs.clone()).await?,
             DashboardCommands::Unarchive { slugs } => commands::dashboards::unarchive(&client, slugs.clone()).await?,
         },
+        Commands::Update => unreachable!("Update handled above"),
     }
 
     Ok(())
