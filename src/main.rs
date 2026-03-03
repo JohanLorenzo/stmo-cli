@@ -7,7 +7,7 @@ use clap::{Parser, Subcommand};
 use api::RedashClient;
 
 #[derive(Parser)]
-#[command(name = "stmo-cli")]
+#[command(name = "stmo-cli", version)]
 #[command(about = "CLI tool for version controlling Redash queries and dashboards", long_about = None)]
 struct Cli {
     #[command(subcommand)]
