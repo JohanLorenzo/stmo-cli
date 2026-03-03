@@ -93,19 +93,7 @@ pub fn is_newer(latest: &str, current: &str) -> bool {
 }
 
 pub async fn check_for_update_from(base_url: &str) -> Option<String> {
-    let cache = read_cache();
-    let latest = if should_check(cache.as_ref()) {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        let version = fetch_latest_version(base_url).await?;
-        write_cache(&version, now);
-        version
-    } else {
-        cache?.latest_version
-    };
-
+    let latest = fetch_latest_version(base_url).await?;
     if is_newer(&latest, CURRENT_VERSION) {
         Some(latest)
     } else {
@@ -118,9 +106,25 @@ pub async fn check_and_auto_update() {
         return;
     }
 
-    let Some(latest) = check_for_update_from("https://crates.io").await else {
-        return;
+    let cache = read_cache();
+    let latest = if should_check(cache.as_ref()) {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let Some(version) = fetch_latest_version("https://crates.io").await else {
+            return;
+        };
+        write_cache(&version, now);
+        version
+    } else {
+        let Some(cache) = cache else { return };
+        cache.latest_version
     };
+
+    if !is_newer(&latest, CURRENT_VERSION) {
+        return;
+    }
 
     eprintln!("Updating stmo-cli {CURRENT_VERSION} → {latest}...");
 
