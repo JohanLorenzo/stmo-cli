@@ -232,6 +232,8 @@ pub async fn deploy(client: &RedashClient, query_ids: Vec<u64>, all: bool) -> Re
             let new_base = format!("queries/{}-{new_slug}", fetched.id);
             fs::write(format!("{new_base}.sql"), &fetched.sql)
                 .context(format!("Failed to write {new_base}.sql"))?;
+            let mut new_visualizations = fetched.visualizations.clone();
+            new_visualizations.sort_by_key(|v| v.id);
             let new_metadata = crate::models::QueryMetadata {
                 id: fetched.id,
                 name: fetched.name.clone(),
@@ -240,7 +242,7 @@ pub async fn deploy(client: &RedashClient, query_ids: Vec<u64>, all: bool) -> Re
                 user_id: fetched.user.as_ref().map(|u| u.id),
                 schedule: fetched.schedule.clone(),
                 options: fetched.options.clone(),
-                visualizations: fetched.visualizations.clone(),
+                visualizations: new_visualizations,
                 tags: fetched.tags.clone(),
             };
             let yaml_content = serde_yaml::to_string(&new_metadata)
@@ -272,6 +274,24 @@ pub async fn deploy(client: &RedashClient, query_ids: Vec<u64>, all: bool) -> Re
                 created_at: String::new(),
             };
             let result = client.create_or_update_query(&query).await?;
+            let fetched = client.get_query(*id).await?;
+            let mut updated_visualizations = fetched.visualizations.clone();
+            updated_visualizations.sort_by_key(|v| v.id);
+            let updated_metadata = crate::models::QueryMetadata {
+                id: fetched.id,
+                name: fetched.name.clone(),
+                description: fetched.description.clone(),
+                data_source_id: fetched.data_source_id,
+                user_id: fetched.user.as_ref().map(|u| u.id),
+                schedule: fetched.schedule.clone(),
+                options: fetched.options.clone(),
+                visualizations: updated_visualizations,
+                tags: fetched.tags.clone(),
+            };
+            let yaml_content = serde_yaml::to_string(&updated_metadata)
+                .context("Failed to serialize query metadata")?;
+            fs::write(&yaml_path, yaml_content)
+                .context(format!("Failed to write {yaml_path}"))?;
             println!("  ✓ {id} - {name}");
             result
         };
