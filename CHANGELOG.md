@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.4.1] - 2026-03-04
+
+### Fixes
+- Fix text widget creation by serializing `visualization_id` as `null` instead of omitting it
+
 ## [0.4.0] - 2026-03-03
 
 ### Features
