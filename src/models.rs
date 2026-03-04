@@ -372,7 +372,6 @@ pub struct DashboardSummary {
 #[derive(Debug, Serialize)]
 pub struct CreateWidget {
     pub dashboard_id: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub visualization_id: Option<u64>,
     pub text: String,
     pub width: u32,
@@ -841,6 +840,28 @@ options:
         assert!(json.contains("\"visualization_id\":279588"));
         assert!(json.contains("\"sizeX\":3"));
         assert!(json.contains("\"sizeY\":2"));
+    }
+
+    #[test]
+    fn test_create_text_widget_serialization() {
+        let widget = CreateWidget {
+            dashboard_id: 2570,
+            visualization_id: None,
+            text: "Some text".to_string(),
+            width: 1,
+            options: WidgetOptions {
+                position: WidgetPosition {
+                    col: 0,
+                    row: 0,
+                    size_x: 3,
+                    size_y: 2,
+                },
+                parameter_mappings: None,
+            },
+        };
+
+        let json = serde_json::to_string(&widget).unwrap();
+        assert!(json.contains("\"visualization_id\":null"));
     }
 
     #[test]
