@@ -172,14 +172,7 @@ fn format_results_json(result: &crate::models::QueryResult, limit: Option<usize>
         result.data.rows.clone()
     };
 
-    let formatted = serde_json::json!({
-        "columns": result.data.columns.iter().map(|c| &c.name).collect::<Vec<_>>(),
-        "rows": rows,
-        "row_count": result.data.rows.len(),
-        "runtime_seconds": result.runtime,
-    });
-
-    serde_json::to_string_pretty(&formatted)
+    serde_json::to_string_pretty(&rows)
         .context("Failed to format results as JSON")
 }
 
@@ -245,8 +238,8 @@ pub async fn execute(
 ) -> Result<()> {
     let (metadata, _sql, yaml_path) = load_query_metadata_by_id(query_id)?;
 
-    println!("Executing query: {} - {}", metadata.id, metadata.name);
-    println!("Source: {yaml_path}\n");
+    eprintln!("Executing query: {} - {}", metadata.id, metadata.name);
+    eprintln!("Source: {yaml_path}\n");
 
     let cli_params: Vec<(String, serde_json::Value)> = param_args
         .iter()
@@ -270,7 +263,7 @@ pub async fn execute(
     match format {
         OutputFormat::Json => {
             let json = format_results_json(&result, limit_rows)?;
-            println!("\n{json}");
+            println!("{json}");
         }
         OutputFormat::Table => {
             let table = format_results_table(&result, limit_rows);
@@ -336,10 +329,10 @@ mod tests {
         let json = format_results_json(&result, None).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
-        assert_eq!(parsed["row_count"], 2);
-        assert_eq!(parsed["runtime_seconds"], 1.5);
-        assert_eq!(parsed["columns"], serde_json::json!(["col1", "col2"]));
-        assert_eq!(parsed["rows"][0]["col1"], "value1");
+        let rows = parsed.as_array().unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0]["col1"], "value1");
+        assert_eq!(rows[0]["col2"], 123);
     }
 
     #[test]
@@ -363,8 +356,7 @@ mod tests {
         let json = format_results_json(&result, Some(2)).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
-        assert_eq!(parsed["row_count"], 3);
-        assert_eq!(parsed["rows"].as_array().unwrap().len(), 2);
+        assert_eq!(parsed.as_array().unwrap().len(), 2);
     }
 
     #[test]

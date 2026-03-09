@@ -56,7 +56,7 @@ enum Commands {
         #[arg(long, default_value = "300", help = "Timeout in seconds")]
         timeout: u64,
 
-        #[arg(long, help = "Limit number of rows displayed (default: 100)")]
+        #[arg(long, help = "Limit number of rows displayed (default: all)")]
         limit: Option<usize>,
     },
 
@@ -162,7 +162,7 @@ async fn main() -> Result<()> {
         Commands::Execute { query_id, param, format, interactive, timeout, limit } => {
             let output_format = format.parse::<commands::OutputFormat>()
                 .context("Invalid output format")?;
-            let limit_rows = limit.or(Some(100));
+            let limit_rows = limit;
             commands::execute::execute(
                 &client,
                 query_id,
