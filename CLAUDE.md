@@ -39,8 +39,9 @@ src/
 ## Data Models
 
 **Query**: Full Redash query (id, name, sql, data_source_id, options.parameters, visualizations, schedule, user)
-**QueryMetadata**: YAML variant (excludes user, uses user_id)
-**CreateQuery**: For ID 0 workflow
+**QueryMetadata**: YAML variant (excludes user, uses user_id; visualizations use VisualizationMetadata)
+**VisualizationMetadata**: Like Visualization but id is `Option<u64>` — null/absent means create new
+**CreateQuery**: For query id=0 workflow (new query creation)
 **DataSource**: id, name, ds_type, syntax, paused, view_only
 **JobStatus**: Pending=1, Started=2, Success=3, Failure=4, Cancelled=5
 
@@ -54,7 +55,7 @@ src/
 
 ## Testing
 
-**Run**: `cargo test` (58 tests with wiremock for HTTP mocking)
+**Run**: `cargo test` (wiremock for HTTP mocking)
 **Locations**: tests/api_integration.rs, src/models.rs, src/commands/*.rs
 
 ## Testing Guidelines

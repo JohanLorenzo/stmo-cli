@@ -19,7 +19,7 @@ This repository contains version-controlled Redash queries and dashboards manage
 2. **Explore schema**: `stmo-cli data-sources <id> --schema`
 3. **Discover queries**: `stmo-cli discover`
 4. **Fetch query**: `stmo-cli fetch <id>` → read `queries/<id>-*.sql`
-5. **Execute**: `stmo-cli execute <id> --format table --limit 50`
+5. **Execute**: `stmo-cli execute <id> --format table`
 6. **Clean up**: `stmo-cli archive <id>` (MANDATORY)
 
 To restore: `stmo-cli unarchive <id> && stmo-cli fetch <id>`
@@ -29,7 +29,7 @@ To restore: `stmo-cli unarchive <id> && stmo-cli fetch <id>`
 ### Queries
 **discover**: List all queries (IDs + names)
 **fetch**: Download queries (`--all` for tracked, or `<ids>`)
-**deploy**: Upload changes (no args = git-changed files only, `--all` for everything, or `<ids>`)
+**deploy**: Upload changes (no args = git-changed files only or all if not in a git repo, `--all` for everything, or `<ids>`)
 **execute**: Run query (`--param key=val`, `--format table|json`, `--interactive`)
 **data-sources**: List sources, `<id> --schema` for tables
 **archive**: Archive queries + delete local (`<ids>` or `--cleanup`)
@@ -53,6 +53,27 @@ Examples:
 
 **SQL**: `queries/{id}-{slug}.sql` - query text
 **YAML**: `queries/{id}-{slug}.yaml` - metadata (name, data_source_id, parameters, visualizations)
+
+Example YAML with visualizations:
+```yaml
+id: 123
+name: My Query
+data_source_id: 63
+options:
+  parameters: []
+visualizations:
+  - id: 456          # existing visualization — deploy updates it by ID
+    name: Chart
+    type: CHART
+    options: {}
+    description: null
+  - name: New Chart  # no id — deploy creates it as a new visualization
+    type: CHART
+    options: {}
+    description: null
+```
+
+To add a visualization to an existing query: add an entry to the `visualizations` list **without** an `id` field (or `id: null`). Do not change the `id` of existing visualizations — they will be updated in place.
 
 ## SQL Style
 
