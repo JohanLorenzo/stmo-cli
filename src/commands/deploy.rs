@@ -35,18 +35,17 @@ fn validate_enum_options(metadata: &crate::models::QueryMetadata, yaml_path: &st
     Ok(())
 }
 
-fn get_changed_query_ids() -> Result<HashSet<u64>> {
+fn get_changed_query_ids() -> Option<HashSet<u64>> {
     let output = Command::new("git")
         .args(["status", "--porcelain"])
         .output()
-        .context("Failed to run git status. Make sure you're in a git repository.")?;
+        .ok()?;
 
     if !output.status.success() {
-        bail!("git status command failed");
+        return None;
     }
 
-    let stdout = String::from_utf8(output.stdout)
-        .context("Failed to parse git status output")?;
+    let stdout = String::from_utf8(output.stdout).ok()?;
 
     let mut changed_ids = HashSet::new();
 
@@ -70,7 +69,7 @@ fn get_changed_query_ids() -> Result<HashSet<u64>> {
         }
     }
 
-    Ok(changed_ids)
+    Some(changed_ids)
 }
 
 fn get_all_query_metadata() -> Result<Vec<(u64, String)>> {
@@ -177,7 +176,11 @@ pub async fn deploy(client: &RedashClient, query_ids: Vec<u64>, all: bool) -> Re
         println!("Deploying all {} queries...\n", all_queries.len());
         all_queries
     } else {
-        let changed_ids = get_changed_query_ids()?;
+        let Some(changed_ids) = get_changed_query_ids() else {
+            println!("No git repository detected.");
+            println!("Tip: Use --all to deploy all queries, or specify query IDs.");
+            return Ok(());
+        };
 
         if changed_ids.is_empty() {
             println!("No changed queries detected.");
