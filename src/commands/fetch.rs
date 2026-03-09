@@ -90,7 +90,10 @@ pub async fn fetch(client: &RedashClient, query_ids: Vec<u64>, all: bool) -> Res
         fs::write(&sql_path, &query.sql)
             .context(format!("Failed to write {sql_path}"))?;
 
-        let mut visualizations = query.visualizations.clone();
+        let mut visualizations: Vec<crate::models::VisualizationMetadata> = query.visualizations
+            .iter()
+            .map(crate::models::VisualizationMetadata::from)
+            .collect();
         visualizations.sort_by_key(|v| v.id);
         let metadata = crate::models::QueryMetadata {
             id: query.id,
