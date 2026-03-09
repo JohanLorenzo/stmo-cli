@@ -105,12 +105,22 @@ fn get_all_query_metadata() -> Result<Vec<(u64, String)>> {
 async fn deploy_visualizations(
     client: &RedashClient,
     query_id: u64,
-    visualizations: &[crate::models::Visualization],
+    visualizations: &[crate::models::VisualizationMetadata],
     server_visualizations: &[crate::models::Visualization],
 ) -> Result<()> {
     let mut matched_server_ids: HashSet<u64> = HashSet::new();
     for viz in visualizations {
-        if viz.id == 0 {
+        if let Some(id) = viz.id {
+            let viz_to_update = crate::models::Visualization {
+                id,
+                name: viz.name.clone(),
+                viz_type: viz.viz_type.clone(),
+                options: viz.options.clone(),
+                description: viz.description.clone(),
+            };
+            client.update_visualization(&viz_to_update).await?;
+            println!("    ✓ Updated visualization: {} (ID: {id})", viz.name);
+        } else {
             let server_match = server_visualizations
                 .iter()
                 .find(|sv| sv.viz_type == viz.viz_type && !matched_server_ids.contains(&sv.id));
@@ -136,8 +146,6 @@ async fn deploy_visualizations(
                 let created = client.create_visualization(query_id, &viz_to_create).await?;
                 println!("    ✓ Created visualization: {} (ID: {})", created.name, created.id);
             }
-        } else {
-            client.update_visualization(viz).await?;
         }
     }
     Ok(())
@@ -232,7 +240,11 @@ pub async fn deploy(client: &RedashClient, query_ids: Vec<u64>, all: bool) -> Re
             let new_base = format!("queries/{}-{new_slug}", fetched.id);
             fs::write(format!("{new_base}.sql"), &fetched.sql)
                 .context(format!("Failed to write {new_base}.sql"))?;
-            let mut new_visualizations = fetched.visualizations.clone();
+            let mut new_visualizations: Vec<crate::models::VisualizationMetadata> = fetched
+                .visualizations
+                .iter()
+                .map(crate::models::VisualizationMetadata::from)
+                .collect();
             new_visualizations.sort_by_key(|v| v.id);
             let new_metadata = crate::models::QueryMetadata {
                 id: fetched.id,
@@ -266,7 +278,7 @@ pub async fn deploy(client: &RedashClient, query_ids: Vec<u64>, all: bool) -> Re
                 user: None,
                 schedule: metadata.schedule.clone(),
                 options: metadata.options.clone(),
-                visualizations: metadata.visualizations.clone(),
+                visualizations: vec![],
                 tags: metadata.tags.clone(),
                 is_archived: false,
                 is_draft: false,
@@ -275,7 +287,11 @@ pub async fn deploy(client: &RedashClient, query_ids: Vec<u64>, all: bool) -> Re
             };
             let result = client.create_or_update_query(&query).await?;
             let fetched = client.get_query(*id).await?;
-            let mut updated_visualizations = fetched.visualizations.clone();
+            let mut updated_visualizations: Vec<crate::models::VisualizationMetadata> = fetched
+                .visualizations
+                .iter()
+                .map(crate::models::VisualizationMetadata::from)
+                .collect();
             updated_visualizations.sort_by_key(|v| v.id);
             let updated_metadata = crate::models::QueryMetadata {
                 id: fetched.id,

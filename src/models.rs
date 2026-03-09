@@ -10,6 +10,14 @@ where
     Ok(Option::deserialize(deserializer)?.unwrap_or_default())
 }
 
+fn deserialize_viz_id<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value: Option<u64> = Option::deserialize(deserializer)?;
+    Ok(value.filter(|&id| id != 0))
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Query {
     pub id: u64,
@@ -127,6 +135,29 @@ pub struct QueriesResponse {
     pub page_size: u64,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct VisualizationMetadata {
+    #[serde(default, deserialize_with = "deserialize_viz_id", skip_serializing_if = "Option::is_none")]
+    pub id: Option<u64>,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub viz_type: String,
+    pub options: serde_json::Value,
+    pub description: Option<String>,
+}
+
+impl From<&Visualization> for VisualizationMetadata {
+    fn from(v: &Visualization) -> Self {
+        Self {
+            id: Some(v.id),
+            name: v.name.clone(),
+            viz_type: v.viz_type.clone(),
+            options: v.options.clone(),
+            description: v.description.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct QueryMetadata {
     pub id: u64,
@@ -137,7 +168,7 @@ pub struct QueryMetadata {
     pub user_id: Option<u64>,
     pub schedule: Option<Schedule>,
     pub options: QueryOptions,
-    pub visualizations: Vec<Visualization>,
+    pub visualizations: Vec<VisualizationMetadata>,
     pub tags: Option<Vec<String>>,
 }
 
