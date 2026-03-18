@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.0] - 2026-03-18
+
+### Features
+- Track `Cargo.lock` for reproducible binary builds
+- `execute`: output a plain JSON rows array; progress messages go to stderr for clean piping; no default row limit
+- `deploy`: use `null` visualization id to signal new visualizations (replaces id=0 convention; existing YAMLs with `id: 0` still work)
+- `deploy`: no longer requires git — falls back gracefully when git is unavailable or outside a repo
+
+### Fixes
+- Add `width` field to `Widget` and `WidgetMetadata` for correct API/YAML round-trips
+- Fix `Widget.text` deserialization when API returns `null`
+- Fix `dashboards archive` — use POST by ID instead of DELETE (DELETE returns 500)
+
 ## [0.4.1] - 2026-03-04
 
 ### Fixes
