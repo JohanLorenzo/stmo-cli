@@ -102,6 +102,7 @@ pub async fn fetch(client: &RedashClient, dashboard_slugs: Vec<String>) -> Resul
                         .iter()
                         .map(|w| WidgetMetadata {
                             id: w.id,
+                            width: w.width,
                             visualization_id: w.visualization_id,
                             query_id: w.visualization.as_ref().map(|v| v.query.id),
                             visualization_name: w.visualization.as_ref().map(|v| v.name.clone()),
@@ -212,6 +213,7 @@ fn save_dashboard_yaml(
             .iter()
             .map(|w: &Widget| WidgetMetadata {
                 id: w.id,
+                width: w.width,
                 visualization_id: w.visualization_id,
                 query_id: w.visualization.as_ref().map(|v| v.query.id),
                 visualization_name: w.visualization.as_ref().map(|v| v.name.clone()),

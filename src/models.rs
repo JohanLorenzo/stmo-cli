@@ -18,6 +18,10 @@ where
     Ok(value.filter(|&id| id != 0))
 }
 
+fn default_width() -> u32 {
+    1
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Query {
     pub id: u64,
@@ -316,6 +320,7 @@ pub struct CreateDashboard {
 pub struct Widget {
     pub id: u64,
     pub dashboard_id: u64,
+    pub width: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub visualization_id: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -372,6 +377,8 @@ pub struct DashboardMetadata {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WidgetMetadata {
     pub id: u64,
+    #[serde(default = "default_width")]
+    pub width: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub visualization_id: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -677,6 +684,7 @@ tags:
                 {
                     "id": 75035,
                     "dashboard_id": 2570,
+                    "width": 1,
                     "text": "# Test Widget",
                     "options": {
                         "position": {
@@ -690,6 +698,7 @@ tags:
                 {
                     "id": 75029,
                     "dashboard_id": 2570,
+                    "width": 1,
                     "visualization_id": 279588,
                     "visualization": {
                         "id": 279588,

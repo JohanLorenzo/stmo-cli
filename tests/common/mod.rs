@@ -594,6 +594,7 @@ pub fn mock_create_widget(dashboard_id: u64, widget_id: u64) -> Mock {
             serde_json::json!({
                 "id": widget_id,
                 "dashboard_id": dashboard_id,
+                "width": 1,
                 "visualization_id": null,
                 "visualization": null,
                 "text": "Test Widget",
