@@ -22,6 +22,13 @@ fn default_width() -> u32 {
     1
 }
 
+fn deserialize_null_as_empty_string<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(Option::deserialize(deserializer)?.unwrap_or_default())
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Query {
     pub id: u64,
@@ -325,7 +332,7 @@ pub struct Widget {
     pub visualization_id: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub visualization: Option<WidgetVisualization>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_null_as_empty_string")]
     pub text: String,
     pub options: WidgetOptions,
 }
