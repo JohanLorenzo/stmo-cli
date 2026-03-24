@@ -124,3 +124,47 @@ async fn test_deploy_new_query_does_not_duplicate_auto_created_table() {
 
     mock_server.verify().await;
 }
+
+#[tokio::test]
+async fn test_deploy_new_viz_does_not_overwrite_existing() {
+    let _guard = get_test_lock().lock().await;
+    let _temp_dir = TempWorkDir::new();
+    let mock_server = wiremock::MockServer::start().await;
+
+    let vizs = serde_json::json!([
+        {"id": 200, "name": "Existing Chart", "type": "CHART", "options": {}, "description": null}
+    ]);
+
+    mock_update_query_with_vizs(42, "Test Query", &vizs)
+        .mount(&mock_server)
+        .await;
+
+    mock_get_query_with_vizs(42, "Test Query", &vizs)
+        .mount(&mock_server)
+        .await;
+
+    mock_update_visualization(200)
+        .expect(1)
+        .mount(&mock_server)
+        .await;
+
+    mock_create_visualization(300, "New Chart")
+        .expect(1)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+
+    std::fs::create_dir_all("queries").unwrap();
+    std::fs::write("queries/42-test-query.sql", "SELECT 1").unwrap();
+    std::fs::write(
+        "queries/42-test-query.yaml",
+        "id: 42\nname: Test Query\ndescription: null\ndata_source_id: 63\nschedule: null\noptions:\n  parameters: []\nvisualizations:\n  - id: 200\n    name: Existing Chart\n    type: CHART\n    options: {}\n    description: null\n  - name: New Chart\n    type: CHART\n    options: {}\n    description: null\ntags: null\n",
+    )
+    .unwrap();
+
+    let result = stmo_cli::commands::deploy::deploy(&client, vec![42], false).await;
+    assert!(result.is_ok(), "Deploy failed: {:?}", result.err());
+
+    mock_server.verify().await;
+}

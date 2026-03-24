@@ -115,12 +115,6 @@ fn prompt_for_parameter(param: &Parameter) -> Result<serde_json::Value> {
                 .interact_text()?;
             Ok(serde_json::json!(input))
         }
-        "text" => {
-            let input: String = Input::new()
-                .with_prompt(title)
-                .interact_text()?;
-            Ok(serde_json::Value::String(input))
-        }
         _ => {
             let input: String = Input::new()
                 .with_prompt(title)

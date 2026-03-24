@@ -229,7 +229,7 @@ fn save_dashboard_yaml(
         .context(format!("Failed to write {filename}"))?;
 
     if let Some(old_path) = old_yaml_path
-        && old_path != std::path::PathBuf::from(&filename)
+        && old_path != std::path::Path::new(&filename)
     {
         fs::remove_file(&old_path)
             .context(format!("Failed to delete {}", old_path.display()))?;

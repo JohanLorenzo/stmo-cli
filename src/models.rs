@@ -184,6 +184,7 @@ pub struct QueryMetadata {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[allow(dead_code)]
 pub struct User {
     pub id: u64,
     pub name: String,

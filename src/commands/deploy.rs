@@ -110,6 +110,7 @@ async fn deploy_visualizations(
     let mut matched_server_ids: HashSet<u64> = HashSet::new();
     for viz in visualizations {
         if let Some(id) = viz.id {
+            matched_server_ids.insert(id);
             let viz_to_update = crate::models::Visualization {
                 id,
                 name: viz.name.clone(),

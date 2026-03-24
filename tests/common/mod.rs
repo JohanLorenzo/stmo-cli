@@ -645,3 +645,63 @@ pub fn mock_refresh_query_forbidden(query_id: u64) -> Mock {
                 .set_body_json(serde_json::json!({"message": "Access denied"}))
         )
 }
+
+pub fn mock_create_visualization(viz_id: u64, name: &str) -> Mock {
+    Mock::given(method("POST"))
+        .and(path("/api/visualizations"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({
+                "id": viz_id,
+                "name": name,
+                "type": "CHART",
+                "options": {},
+                "description": null
+            })
+        ))
+}
+
+pub fn mock_update_query_with_vizs(query_id: u64, name: &str, vizs: &serde_json::Value) -> Mock {
+    Mock::given(method("POST"))
+        .and(path(format!("/api/queries/{query_id}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({
+                "id": query_id,
+                "name": name,
+                "description": null,
+                "query": "SELECT 1",
+                "data_source_id": 63,
+                "user": null,
+                "schedule": null,
+                "options": {"parameters": []},
+                "visualizations": vizs,
+                "tags": null,
+                "is_archived": false,
+                "is_draft": false,
+                "updated_at": "2026-01-21T10:00:00",
+                "created_at": "2026-01-21T10:00:00"
+            })
+        ))
+}
+
+pub fn mock_get_query_with_vizs(query_id: u64, name: &str, vizs: &serde_json::Value) -> Mock {
+    Mock::given(method("GET"))
+        .and(path(format!("/api/queries/{query_id}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({
+                "id": query_id,
+                "name": name,
+                "description": null,
+                "query": "SELECT 1",
+                "data_source_id": 63,
+                "user": null,
+                "schedule": null,
+                "options": {"parameters": []},
+                "visualizations": vizs,
+                "tags": null,
+                "is_archived": false,
+                "is_draft": false,
+                "updated_at": "2026-01-21T10:00:00",
+                "created_at": "2026-01-21T10:00:00"
+            })
+        ))
+}
