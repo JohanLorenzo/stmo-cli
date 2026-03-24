@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.5.1] - 2026-03-24
+
+### Fixes
+- `deploy`: fix visualizations with explicit IDs being overwritten when adding a new visualization of the same type
+
 ## [0.5.0] - 2026-03-18
 
 ### Features
