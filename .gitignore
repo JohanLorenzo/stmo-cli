@@ -1,2 +1,4 @@
 /target
 *.gpg
+**.local.*
+.claude/worktrees/
