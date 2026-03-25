@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.5.2] - 2026-03-25
+
+### Fixes
+- `dashboards deploy`: resolve `visualization_id` from `query_id` + `visualization_name` so query-backed widgets are no longer created as empty widgets
+
 ## [0.5.1] - 2026-03-24
 
 ### Fixes
