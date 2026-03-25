@@ -444,3 +444,143 @@ widgets:
         "dashboard_filters_enabled should be true when widgets have parameters"
     );
 }
+
+#[tokio::test]
+async fn test_deploy_resolves_visualization_id_from_query_and_name() {
+    let _guard = get_test_lock().lock().await;
+    let _temp_dir = TempWorkDir::new();
+    let mock_server = wiremock::MockServer::start().await;
+
+    let dashboard_id = 2570_u64;
+    let query_id = 12345_u64;
+    let slug = "my-dashboard";
+    let vizs = serde_json::json!([
+        {"id": 55555, "name": "My Chart", "type": "CHART", "options": {}, "description": null},
+        {"id": 55556, "name": "Table", "type": "TABLE", "options": {}, "description": null}
+    ]);
+
+    mock_get_dashboard_with_slug(dashboard_id, "My Dashboard", slug, false)
+        .mount(&mock_server)
+        .await;
+
+    mock_get_query_with_vizs(query_id, "My Query", &vizs)
+        .mount(&mock_server)
+        .await;
+
+    mock_create_widget(dashboard_id, 99001)
+        .mount(&mock_server)
+        .await;
+
+    mock_update_dashboard(dashboard_id, "My Dashboard")
+        .mount(&mock_server)
+        .await;
+
+    mock_get_dashboard_with_slug(dashboard_id, "My Dashboard", slug, false)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+
+    std::fs::create_dir_all("dashboards").unwrap();
+
+    let yaml_content = format!("id: {dashboard_id}
+name: My Dashboard
+slug: {slug}
+user_id: 530
+is_draft: false
+is_archived: false
+dashboard_filters_enabled: false
+tags: []
+widgets:
+  - id: 0
+    query_id: {query_id}
+    visualization_name: My Chart
+    options:
+      position:
+        col: 0
+        row: 0
+        sizeX: 3
+        sizeY: 8
+");
+    std::fs::write(format!("dashboards/{dashboard_id}-{slug}.yaml"), yaml_content).unwrap();
+
+    let result = stmo_cli::commands::dashboards::deploy(
+        &client,
+        vec![slug.to_string()],
+        false,
+    ).await;
+
+    assert!(result.is_ok(), "Deploy failed: {:?}", result.err());
+
+    let received = mock_server.received_requests().await.unwrap();
+
+    let widget_create_req = received
+        .iter()
+        .find(|r| r.method.as_str() == "POST" && r.url.path() == "/api/widgets")
+        .expect("Expected widget create request");
+
+    let body: serde_json::Value = serde_json::from_slice(&widget_create_req.body).unwrap();
+    assert_eq!(
+        body["visualization_id"], 55555,
+        "visualization_id should be resolved from query_id + visualization_name, got: {}",
+        body["visualization_id"]
+    );
+}
+
+#[tokio::test]
+async fn test_deploy_fails_when_visualization_name_not_found() {
+    let _guard = get_test_lock().lock().await;
+    let _temp_dir = TempWorkDir::new();
+    let mock_server = wiremock::MockServer::start().await;
+
+    let dashboard_id = 2570_u64;
+    let query_id = 12345_u64;
+    let slug = "my-dashboard";
+    let vizs = serde_json::json!([
+        {"id": 99999, "name": "Table", "type": "TABLE", "options": {}, "description": null}
+    ]);
+
+    mock_get_dashboard_with_slug(dashboard_id, "My Dashboard", slug, false)
+        .mount(&mock_server)
+        .await;
+
+    mock_get_query_with_vizs(query_id, "My Query", &vizs)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+
+    std::fs::create_dir_all("dashboards").unwrap();
+
+    let yaml_content = format!("id: {dashboard_id}
+name: My Dashboard
+slug: {slug}
+user_id: 530
+is_draft: false
+is_archived: false
+dashboard_filters_enabled: false
+tags: []
+widgets:
+  - id: 0
+    query_id: {query_id}
+    visualization_name: Nonexistent
+    options:
+      position:
+        col: 0
+        row: 0
+        sizeX: 3
+        sizeY: 8
+");
+    std::fs::write(format!("dashboards/{dashboard_id}-{slug}.yaml"), yaml_content).unwrap();
+
+    let result = stmo_cli::commands::dashboards::deploy(
+        &client,
+        vec![slug.to_string()],
+        false,
+    ).await;
+
+    assert!(result.is_err(), "Expected deploy to fail");
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("failed to deploy"), "Unexpected error: {err}");
+    assert!(err.contains("my-dashboard"), "Unexpected error: {err}");
+}

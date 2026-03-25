@@ -238,6 +238,35 @@ fn save_dashboard_yaml(
     Ok(())
 }
 
+async fn resolve_visualization_id(
+    client: &RedashClient,
+    widget: &WidgetMetadata,
+    query_cache: &mut HashMap<u64, Query>,
+) -> Result<Option<u64>> {
+    if let Some(viz_id) = widget.visualization_id {
+        return Ok(Some(viz_id));
+    }
+
+    let (Some(query_id), Some(viz_name)) = (widget.query_id, widget.visualization_name.as_deref()) else {
+        return Ok(None);
+    };
+
+    if let std::collections::hash_map::Entry::Vacant(e) = query_cache.entry(query_id) {
+        e.insert(client.get_query(query_id).await?);
+    }
+
+    let query = query_cache.get(&query_id).expect("just inserted");
+    match query.visualizations.iter().find(|v| v.name == viz_name) {
+        Some(viz) => Ok(Some(viz.id)),
+        None => {
+            let available: Vec<&str> = query.visualizations.iter().map(|v| v.name.as_str()).collect();
+            anyhow::bail!(
+                "No visualization named '{viz_name}' found on query {query_id}. Available: {available:?}"
+            );
+        }
+    }
+}
+
 async fn auto_populate_parameter_mappings(
     client: &RedashClient,
     query_id: u64,
@@ -345,7 +374,7 @@ async fn deploy_single_dashboard(client: &RedashClient, dashboard_slug: &str) ->
 
             let create_widget = CreateWidget {
                 dashboard_id: server_dashboard_id,
-                visualization_id: widget.visualization_id,
+                visualization_id: resolve_visualization_id(client, widget, &mut query_cache).await?,
                 text: widget.text.clone(),
                 width: 1,
                 options,
