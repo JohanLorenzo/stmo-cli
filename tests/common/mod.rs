@@ -610,6 +610,24 @@ pub fn mock_create_widget(dashboard_id: u64, widget_id: u64) -> Mock {
         ))
 }
 
+pub fn mock_update_widget(widget_id: u64, dashboard_id: u64) -> Mock {
+    Mock::given(method("POST"))
+        .and(path(format!("/api/widgets/{widget_id}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({
+                "id": widget_id,
+                "dashboard_id": dashboard_id,
+                "width": 1,
+                "visualization_id": null,
+                "visualization": null,
+                "text": "",
+                "options": {
+                    "position": { "col": 0, "row": 0, "sizeX": 3, "sizeY": 2 }
+                }
+            })
+        ))
+}
+
 pub fn mock_delete_widget(widget_id: u64) -> Mock {
     Mock::given(method("DELETE"))
         .and(path(format!("/api/widgets/{widget_id}")))

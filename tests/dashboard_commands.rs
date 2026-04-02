@@ -584,3 +584,113 @@ widgets:
     assert!(err.contains("failed to deploy"), "Unexpected error: {err}");
     assert!(err.contains("my-dashboard"), "Unexpected error: {err}");
 }
+
+#[tokio::test]
+async fn test_deploy_updates_existing_widgets() {
+    let _guard = get_test_lock().lock().await;
+    let _temp_dir = TempWorkDir::new();
+    let mock_server = wiremock::MockServer::start().await;
+
+    let dashboard_id = 2570_u64;
+    let query_id = 12345_u64;
+    let widget_id = 75035_u64;
+    let slug = "my-dashboard";
+    let vizs = serde_json::json!([
+        {"id": 55557, "name": "Updated Chart", "type": "CHART", "options": {}, "description": null},
+        {"id": 55556, "name": "Table", "type": "TABLE", "options": {}, "description": null}
+    ]);
+
+    // First GET: server dashboard already has the existing widget
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .and(wiremock::matchers::path(format!("/api/dashboards/{slug}")))
+        .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({
+                "id": dashboard_id,
+                "name": "My Dashboard",
+                "slug": slug,
+                "user_id": 530,
+                "is_archived": false,
+                "is_draft": false,
+                "dashboard_filters_enabled": false,
+                "tags": [],
+                "widgets": [{
+                    "id": widget_id,
+                    "dashboard_id": dashboard_id,
+                    "width": 1,
+                    "visualization_id": 55556,
+                    "visualization": {"id": 55556, "name": "Table", "query": {"id": query_id, "name": "My Query"}},
+                    "text": "",
+                    "options": {"position": {"col": 0, "row": 0, "sizeX": 3, "sizeY": 2}}
+                }]
+            })
+        ))
+        .mount(&mock_server)
+        .await;
+
+    mock_get_query_with_vizs(query_id, "My Query", &vizs)
+        .mount(&mock_server)
+        .await;
+
+    mock_update_widget(widget_id, dashboard_id)
+        .mount(&mock_server)
+        .await;
+
+    mock_update_dashboard(dashboard_id, "My Dashboard")
+        .mount(&mock_server)
+        .await;
+
+    // Second GET: re-fetch after deploy
+    mock_get_dashboard_with_slug(dashboard_id, "My Dashboard", slug, false)
+        .mount(&mock_server)
+        .await;
+
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+
+    std::fs::create_dir_all("dashboards").unwrap();
+
+    let yaml_content = format!("id: {dashboard_id}
+name: My Dashboard
+slug: {slug}
+user_id: 530
+is_draft: false
+is_archived: false
+dashboard_filters_enabled: false
+tags: []
+widgets:
+  - id: {widget_id}
+    query_id: {query_id}
+    visualization_name: Updated Chart
+    options:
+      position:
+        col: 3
+        row: 5
+        sizeX: 6
+        sizeY: 4
+");
+    std::fs::write(format!("dashboards/{dashboard_id}-{slug}.yaml"), yaml_content).unwrap();
+
+    let result = stmo_cli::commands::dashboards::deploy(
+        &client,
+        vec![slug.to_string()],
+        false,
+    ).await;
+
+    assert!(result.is_ok(), "Deploy failed: {:?}", result.err());
+
+    let received = mock_server.received_requests().await.unwrap();
+
+    let widget_update_req = received
+        .iter()
+        .find(|r| r.method.as_str() == "POST" && r.url.path() == format!("/api/widgets/{widget_id}"));
+
+    assert!(
+        widget_update_req.is_some(),
+        "Expected POST /api/widgets/{widget_id} but got: {:?}",
+        received.iter().map(|r| format!("{} {}", r.method, r.url.path())).collect::<Vec<_>>()
+    );
+
+    let body: serde_json::Value = serde_json::from_slice(&widget_update_req.unwrap().body).unwrap();
+    assert_eq!(body["visualization_id"], 55557, "visualization_id should resolve to Updated Chart");
+    assert_eq!(body["options"]["position"]["col"], 3);
+    assert_eq!(body["options"]["position"]["row"], 5);
+}

@@ -380,6 +380,29 @@ async fn deploy_single_dashboard(client: &RedashClient, dashboard_slug: &str) ->
                 options,
             };
             client.create_widget(&create_widget).await?;
+        } else {
+            let mut options = widget.options.clone();
+
+            if let Some(query_id) = widget.query_id
+                && let Some(mappings) = auto_populate_parameter_mappings(
+                    client,
+                    query_id,
+                    options.parameter_mappings.as_ref(),
+                    &mut query_cache,
+                ).await?
+            {
+                options.parameter_mappings = Some(mappings);
+                any_widget_has_params = true;
+            }
+
+            let update_payload = CreateWidget {
+                dashboard_id: server_dashboard_id,
+                visualization_id: resolve_visualization_id(client, widget, &mut query_cache).await?,
+                text: widget.text.clone(),
+                width: widget.width,
+                options,
+            };
+            client.update_widget(widget.id, &update_payload).await?;
         }
     }
 

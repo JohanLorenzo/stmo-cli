@@ -518,6 +518,27 @@ impl RedashClient {
             .context("Failed to parse widget create response")
     }
 
+    pub async fn update_widget(&self, widget_id: u64, widget: &CreateWidget) -> Result<crate::models::Widget> {
+        let url = format!("{}/api/widgets/{widget_id}", self.base_url);
+        let response = self.client
+            .post(&url)
+            .json(widget)
+            .send()
+            .await
+            .context(format!("Failed to update widget {widget_id}"))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!("HTTP {}: {} — {body}", status.as_u16(), status.canonical_reason().unwrap_or("Unknown error"));
+        }
+
+        response
+            .json()
+            .await
+            .context("Failed to parse widget update response")
+    }
+
     pub async fn delete_widget(&self, widget_id: u64) -> Result<()> {
         let url = format!("{}/api/widgets/{widget_id}", self.base_url);
         let response = self.client
