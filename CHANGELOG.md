@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.5.3] - 2026-04-02
+
+### Fixes
+- `dashboards deploy`: update existing widgets (non-zero ID) when `visualization_name` or `position` changes in the YAML
+
 ## [0.5.2] - 2026-03-25
 
 ### Fixes
