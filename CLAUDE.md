@@ -52,6 +52,7 @@ src/
 **Execution**: refresh_query, poll_job, get_query_result, execute_query_with_polling
 **Data Source**: list_data_sources, get_data_source, get_data_source_schema
 **Archive**: archive_query, unarchive_query
+**Widget**: create_widget, update_widget, delete_widget
 
 ## Testing
 
