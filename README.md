@@ -41,6 +41,8 @@ export REDASH_API_KEY="your-api-key-here"
 export REDASH_URL="https://sql.telemetry.mozilla.org"  # optional, this is the default
 ```
 
+For Mozilla, the key can be accessed via the following URL: https://sql.telemetry.mozilla.org/users/me
+
 3. Create directories:
 ```bash
 stmo-cli init
