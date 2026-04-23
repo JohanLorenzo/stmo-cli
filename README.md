@@ -16,7 +16,7 @@ Rust CLI for version controlling Redash queries and dashboards.
 
 ## Claude Integration
 
-stmo-cli works great with the [mozdata-claude-plugin](https://github.com/akkomar/mozdata-claude-plugin?tab=readme-ov-file#installation), which provides Mozilla telemetry expertise and discovery directly in Claude.
+stmo-cli works great with the [mozdata-claude-plugin](https://github.com/mozilla/internal-aidev-plugins/tree/main/plugins/mozdata), which provides Mozilla telemetry expertise and discovery directly in Claude.
 
 ## Installation
 
