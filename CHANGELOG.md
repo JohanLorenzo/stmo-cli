@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.5.4] - 2026-04-29
+
+### Fixes
+- Switch reqwest TLS backend from `native-tls` to `rustls-tls` to fix HTTPS connections through HTTP CONNECT proxies on macOS (`OSStatus -26276`)
+
 ## [0.5.3] - 2026-04-02
 
 ### Fixes
