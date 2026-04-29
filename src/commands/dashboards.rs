@@ -3,7 +3,7 @@
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::api::RedashClient;
 use crate::models::{
@@ -256,14 +256,13 @@ async fn resolve_visualization_id(
     }
 
     let query = query_cache.get(&query_id).expect("just inserted");
-    match query.visualizations.iter().find(|v| v.name == viz_name) {
-        Some(viz) => Ok(Some(viz.id)),
-        None => {
-            let available: Vec<&str> = query.visualizations.iter().map(|v| v.name.as_str()).collect();
-            anyhow::bail!(
-                "No visualization named '{viz_name}' found on query {query_id}. Available: {available:?}"
-            );
-        }
+    if let Some(viz) = query.visualizations.iter().find(|v| v.name == viz_name) {
+        Ok(Some(viz.id))
+    } else {
+        let available: Vec<&str> = query.visualizations.iter().map(|v| v.name.as_str()).collect();
+        anyhow::bail!(
+            "No visualization named '{viz_name}' found on query {query_id}. Available: {available:?}"
+        );
     }
 }
 
@@ -290,7 +289,7 @@ async fn auto_populate_parameter_mappings(
         .map(|q| build_dashboard_level_parameter_mappings(&q.options.parameters)))
 }
 
-async fn deploy_single_dashboard(client: &RedashClient, dashboard_slug: &str) -> Result<String> {
+fn find_dashboard_yaml(dashboard_slug: &str) -> Result<PathBuf> {
     let yaml_files: Vec<_> = fs::read_dir("dashboards")
         .context("Failed to read dashboards directory")?
         .filter_map(std::result::Result::ok)
@@ -309,12 +308,14 @@ async fn deploy_single_dashboard(client: &RedashClient, dashboard_slug: &str) ->
     if yaml_files.is_empty() {
         anyhow::bail!("No YAML file found for dashboard '{dashboard_slug}'");
     }
-
     if yaml_files.len() > 1 {
         anyhow::bail!("Multiple YAML files found for dashboard '{dashboard_slug}'");
     }
+    Ok(yaml_files[0].path())
+}
 
-    let yaml_path = yaml_files[0].path();
+async fn deploy_single_dashboard(client: &RedashClient, dashboard_slug: &str) -> Result<String> {
+    let yaml_path = find_dashboard_yaml(dashboard_slug)?;
     let yaml_content = fs::read_to_string(&yaml_path)
         .context(format!("Failed to read {}", yaml_path.display()))?;
 
