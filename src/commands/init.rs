@@ -203,7 +203,7 @@ fn setup_precommit(target_dir: &Path) -> Result<bool> {
     Ok(true)
 }
 
-fn init_in(target_dir: &Path) -> Result<()> {
+fn init_in(target_dir: &Path) -> Result<bool> {
     println!("Scaffolding query/dashboard repository...\n");
 
     let mut files_created = 0;
@@ -233,32 +233,37 @@ fn init_in(target_dir: &Path) -> Result<()> {
 
     if files_created == 0 {
         println!("\n✓ Repository already initialized");
-        return Ok(());
+        return Ok(false);
     }
 
     if git_available() {
         setup_git_repo(target_dir, files_created > 0)?;
-
-        if files_created > 0 {
-            setup_precommit(target_dir)?;
-        }
     } else {
         println!("\n⚠ git is not installed - files created but not committed");
         println!("  Install git to enable version control");
     }
 
-    println!("\n✓ Repository scaffolded successfully");
-    println!("\nNext steps:");
-    println!("  1. Set REDASH_API_KEY environment variable");
-    println!("  2. Run 'stmo-cli discover' to see available queries");
-    println!("  3. Run 'stmo-cli fetch <id>' to download queries");
-    println!("  4. Run 'stmo-cli deploy' to push changes back to Redash");
-
-    Ok(())
+    Ok(true)
 }
 
 pub fn init() -> Result<()> {
-    init_in(Path::new("."))
+    let target_dir = Path::new(".");
+    let files_created = init_in(target_dir)?;
+
+    if files_created && git_available() {
+        setup_precommit(target_dir)?;
+    }
+
+    if files_created {
+        println!("\n✓ Repository scaffolded successfully");
+        println!("\nNext steps:");
+        println!("  1. Set REDASH_API_KEY environment variable");
+        println!("  2. Run 'stmo-cli discover' to see available queries");
+        println!("  3. Run 'stmo-cli fetch <id>' to download queries");
+        println!("  4. Run 'stmo-cli deploy' to push changes back to Redash");
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
