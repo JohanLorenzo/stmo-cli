@@ -124,6 +124,19 @@ fn prompt_for_parameter(param: &Parameter) -> Result<serde_json::Value> {
     }
 }
 
+// Redash rejects numeric JSON values for text/date parameters with a 400 error.
+// --param parsing tries serde_json::from_str first, so "90" becomes the integer 90.
+// This converts it back to a string when the declared parameter type requires one.
+fn coerce_for_type(value: &serde_json::Value, param_type: &str) -> serde_json::Value {
+    match param_type {
+        "text" | "date" => match value {
+            serde_json::Value::String(_) => value.clone(),
+            other => serde_json::Value::String(other.to_string()),
+        },
+        _ => value.clone(),
+    }
+}
+
 fn build_parameter_map(
     metadata: &QueryMetadata,
     cli_params: &[(String, serde_json::Value)],
@@ -136,7 +149,10 @@ fn build_parameter_map(
     let mut param_map = HashMap::new();
 
     for (name, value) in cli_params {
-        param_map.insert(name.clone(), value.clone());
+        let coerced = metadata.options.parameters.iter()
+            .find(|p| p.name == *name)
+            .map_or_else(|| value.clone(), |p| coerce_for_type(value, &p.param_type));
+        param_map.insert(name.clone(), coerced);
     }
 
     for param in &metadata.options.parameters {
@@ -440,5 +456,60 @@ mod tests {
         let result = "csv".parse::<OutputFormat>();
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Invalid format"));
+    }
+
+    #[test]
+    fn test_coerce_for_type_text_coerces_number_to_string() {
+        let result = coerce_for_type(&serde_json::json!(90), "text");
+        assert_eq!(result, serde_json::Value::String("90".to_string()));
+    }
+
+    #[test]
+    fn test_coerce_for_type_text_leaves_string_unchanged() {
+        let result = coerce_for_type(&serde_json::json!("90"), "text");
+        assert_eq!(result, serde_json::Value::String("90".to_string()));
+    }
+
+    #[test]
+    fn test_coerce_for_type_date_coerces_to_string() {
+        let result = coerce_for_type(&serde_json::json!(20260507), "date");
+        assert_eq!(result, serde_json::Value::String("20260507".to_string()));
+    }
+
+    #[test]
+    fn test_coerce_for_type_number_leaves_number_unchanged() {
+        let result = coerce_for_type(&serde_json::json!(42), "number");
+        assert_eq!(result, serde_json::json!(42));
+    }
+
+    #[test]
+    fn test_build_parameter_map_coerces_text_param() {
+        let metadata = crate::models::QueryMetadata {
+            id: 1,
+            name: "Test".to_string(),
+            description: None,
+            data_source_id: 25,
+            user_id: None,
+            schedule: None,
+            options: crate::models::QueryOptions {
+                parameters: vec![
+                    crate::models::Parameter {
+                        name: "days".to_string(),
+                        title: "days".to_string(),
+                        param_type: "text".to_string(),
+                        value: None,
+                        enum_options: None,
+                        query_id: None,
+                        multi_values_options: None,
+                    },
+                ],
+            },
+            visualizations: vec![],
+            tags: None,
+        };
+
+        let cli_params = vec![("days".to_string(), serde_json::json!(90))];
+        let result = build_parameter_map(&metadata, &cli_params, false).unwrap().unwrap();
+        assert_eq!(result["days"], serde_json::Value::String("90".to_string()));
     }
 }

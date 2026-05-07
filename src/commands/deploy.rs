@@ -265,10 +265,18 @@ pub async fn deploy(client: &RedashClient, query_ids: Vec<u64>, all: bool) -> Re
                 .context("Failed to serialize query metadata")?;
             fs::write(format!("{new_base}.yaml"), yaml_content)
                 .context(format!("Failed to write {new_base}.yaml"))?;
-            fs::remove_file(&sql_path)
-                .context(format!("Failed to delete {sql_path}"))?;
-            fs::remove_file(&yaml_path)
-                .context(format!("Failed to delete {yaml_path}"))?;
+            // Non-fatal: the new {id}-* files are already written. If the delete
+            // fails (e.g. sandbox restrictions), warn rather than aborting the deploy.
+            // The orphan 0-* files must be removed manually before the next deploy
+            // to prevent stmo-cli from treating them as a new query again.
+            if let Err(e) = fs::remove_file(&sql_path) {
+                eprintln!("Warning: could not remove {sql_path}: {e}");
+                eprintln!("  Delete it manually before the next deploy to avoid re-creating this query.");
+            }
+            if let Err(e) = fs::remove_file(&yaml_path) {
+                eprintln!("Warning: could not remove {yaml_path}: {e}");
+                eprintln!("  Delete it manually before the next deploy to avoid re-creating this query.");
+            }
             println!("  ✓ Created new query: {} - {name}", fetched.id);
             println!("    Renamed: 0-{slug}.* → {}-{new_slug}.*", fetched.id);
             fetched
