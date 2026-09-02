@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.10.0] - 2026-09-02
 
 ### Features
 - `login`: store your Redash API key in the macOS Keychain; `REDASH_API_KEY` now falls back to it automatically (with a hidden first-run prompt in interactive terminals), so you no longer need to export the key in every shell/session
