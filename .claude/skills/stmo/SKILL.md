@@ -54,7 +54,7 @@ cd artifacts/stmo
 
 Queries created during exploration are ephemeral: fetch → execute → archive → done.
 
-`stmo-cli deploy` compares local queries against their server copy, so it works fine here even without git. `stmo-cli snippets deploy` still relies on git-based change detection and won't detect anything in this non-git temp directory — always use `stmo-cli snippets deploy --all` instead.
+`stmo-cli deploy` and `stmo-cli snippets deploy` both compare local content against the server copy, so they work fine here even without git.
 
 ## Data exploration workflow
 
