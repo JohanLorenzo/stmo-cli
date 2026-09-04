@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Features
+- `init [PATH]`: scaffold a directory of your choice instead of always the current directory (defaults to `.` when omitted)
+
 ## [0.10.0] - 2026-09-02
 
 ### Features

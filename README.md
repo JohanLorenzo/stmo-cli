@@ -74,7 +74,8 @@ For Mozilla, the key can be accessed via the following URL: https://sql.telemetr
 
 3. Create directories:
 ```bash
-stmo-cli init
+stmo-cli init                  # scaffolds the current directory
+stmo-cli init ~/stmo-queries   # or scaffolds a directory of your choice (created if missing)
 ```
 
 4. Discover available queries:

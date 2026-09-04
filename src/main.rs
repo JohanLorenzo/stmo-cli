@@ -30,7 +30,10 @@ enum Commands {
     },
 
     #[command(about = "Scaffold a new query/dashboard repository")]
-    Init,
+    Init {
+        #[arg(help = "Directory to scaffold into (default: current directory)")]
+        path: Option<std::path::PathBuf>,
+    },
 
     #[command(about = "Fetch queries from Redash")]
     Fetch {
@@ -271,7 +274,7 @@ async fn run_command(client: RedashClient, command: Commands) -> Result<()> {
         Commands::Discover { search, limit } => {
             commands::discover::discover(&client, search.as_deref(), limit).await?;
         }
-        Commands::Init | Commands::Update | Commands::Login => unreachable!(),
+        Commands::Init { .. } | Commands::Update | Commands::Login => unreachable!(),
         Commands::Fetch { query_ids, all } => {
             commands::fetch::fetch(&client, query_ids, all).await?;
         }
@@ -414,7 +417,7 @@ API key: https://sql.telemetry.mozilla.org/users/me → API Key section
 
 discover [--search TEXT] [--limit N] | fetch [IDs] [--all] | deploy [IDs] [--all] | execute ID [--format table|json] [--param k=v]... [--interactive] [--limit N] [--timeout SECS]
 execute --data-source ID [--file PATH|-] [--param k=v]...: ad-hoc SQL from a file or stdin ('-' or omit --file = read stdin), no tracked query created (no schema, so no d_* dates or multi-value expansion — inline values in the SQL)
-data-sources [ID] [--schema] [--refresh] [--format table|json] | archive IDs | archive --cleanup | unarchive IDs | init | update | login
+data-sources [ID] [--schema] [--refresh] [--format table|json] | archive IDs | archive --cleanup | unarchive IDs | init [PATH] | update | login
 dashboards discover|fetch SLUGS|deploy SLUGS [--all]|archive SLUGS|unarchive SLUGS
 snippets list|fetch [IDs] [--all]|deploy [IDs] [--all]|delete IDs
 
@@ -462,8 +465,8 @@ async fn main() -> Result<()> {
         }
     };
 
-    if let Commands::Init = cli.command {
-        let result = commands::init::init();
+    if let Commands::Init { path } = cli.command {
+        let result = commands::init::init(path);
         version_checker.print_warning();
         return result;
     }

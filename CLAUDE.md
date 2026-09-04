@@ -4,7 +4,7 @@ Redash CLI that gives Claude Code direct access to sql.telemetry.mozilla.org —
 
 ## Quick Reference
 
-**Commands**: `discover [--search TEXT] [--limit N]` `init` `fetch` `deploy` `execute [ID] [--data-source ID [--file PATH|-]]` `data-sources` `archive` `unarchive` `dashboards` `schedule` `snippets` `login`
+**Commands**: `discover [--search TEXT] [--limit N]` `init [PATH]` `fetch` `deploy` `execute [ID] [--data-source ID [--file PATH|-]]` `data-sources` `archive` `unarchive` `dashboards` `schedule` `snippets` `login`
 **Env Vars**: `REDASH_API_KEY` (required unless stored via `login`), `REDASH_URL` (optional, defaults to sql.telemetry.mozilla.org)
 
 On macOS, `REDASH_API_KEY` falls back to the `stmo-cli` item in the macOS Keychain
