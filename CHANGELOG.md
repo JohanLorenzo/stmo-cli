@@ -4,6 +4,7 @@
 
 ### Features
 - `init [PATH]`: scaffold a directory of your choice instead of always the current directory (defaults to `.` when omitted)
+- `init` is now an interactive wizard: git repo, initial commit, linter configs, pre-commit hooks and `CLAUDE.md` are each opt-in questions instead of always happening, and it needs a real terminal to ask them in ([#2](https://github.com/mozilla/stmo-cli/issues/2))
 
 ### Fixes
 - `init`: refuse to scaffold into a directory containing unrelated files (e.g. your home directory), which previously ran `git add .`/`git commit` over everything in it ([#42](https://github.com/mozilla/stmo-cli/issues/42))

@@ -80,6 +80,18 @@ stmo-cli init ~/stmo-queries   # or scaffolds a directory of your choice (create
 `init` refuses to scaffold into a directory that already contains unrelated files (e.g.
 your home directory) — pick an empty or dedicated subdirectory instead.
 
+`init` is an interactive wizard — it needs a real terminal, and asks before touching
+anything:
+```
+? Initialize a git repository?           [y/N]
+? Create an initial commit?               [y/N]   (only asked if you said yes above)
+? Add linter configs (.sqlfluff, .yamllint)?  [Y/n]
+? Install pre-commit hooks?                [y/N]   (only asked if git + linters + pre-commit are all available)
+? Add CLAUDE.md for AI assistants?         [Y/n]
+```
+`queries/` and `dashboards/` are always created; everything else is opt-in. `init` never
+runs git on your behalf unless you say yes — no more surprise commits.
+
 4. Discover available queries:
 ```bash
 stmo-cli discover                          # List your own queries
