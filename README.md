@@ -77,6 +77,8 @@ For Mozilla, the key can be accessed via the following URL: https://sql.telemetr
 stmo-cli init                  # scaffolds the current directory
 stmo-cli init ~/stmo-queries   # or scaffolds a directory of your choice (created if missing)
 ```
+`init` refuses to scaffold into a directory that already contains unrelated files (e.g.
+your home directory) — pick an empty or dedicated subdirectory instead.
 
 4. Discover available queries:
 ```bash

@@ -277,8 +277,80 @@ fn init_in(target_dir: &Path) -> Result<bool> {
     Ok(true)
 }
 
+#[derive(Debug, PartialEq)]
+enum TargetState {
+    New,
+    Empty,
+    ExistingScaffold,
+    Unrelated(Vec<String>),
+}
+
+fn tolerated_entry(name: &str) -> bool {
+    if SCAFFOLD_FILES.iter().any(|f| f.path == name) {
+        return true;
+    }
+    matches!(
+        name,
+        "queries" | "dashboards" | "snippets" | ".git" | ".github" | ".DS_Store"
+    ) || name.starts_with("README")
+        || name.starts_with("LICENSE")
+}
+
+fn classify_target(target: &Path) -> Result<TargetState> {
+    if !target.exists() {
+        return Ok(TargetState::New);
+    }
+
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(target).with_context(|| {
+        format!(
+            "Failed to read contents of target directory {}",
+            target.display()
+        )
+    })? {
+        let entry = entry.context("Failed to read directory entry")?;
+        entries.push(entry.file_name().to_string_lossy().into_owned());
+    }
+
+    if entries.is_empty() {
+        return Ok(TargetState::Empty);
+    }
+
+    let unrelated: Vec<String> = entries
+        .into_iter()
+        .filter(|name| !tolerated_entry(name))
+        .collect();
+
+    if unrelated.is_empty() {
+        Ok(TargetState::ExistingScaffold)
+    } else {
+        Ok(TargetState::Unrelated(unrelated))
+    }
+}
+
+fn check_target(target: &Path) -> Result<TargetState> {
+    let state = classify_target(target)?;
+    if let TargetState::Unrelated(mut entries) = state {
+        entries.sort();
+        let shown_count = entries.len().min(5);
+        let mut names = entries[..shown_count].join(", ");
+        if entries.len() > shown_count {
+            names = format!("{names}, and {} more", entries.len() - shown_count);
+        }
+        anyhow::bail!(
+            "{} contains unrelated files ({names}) and doesn't look like a query/dashboard \
+             repository.\nPick an empty or dedicated subdirectory instead, e.g.:\n  \
+             stmo-cli init {}/stmo-queries",
+            target.display(),
+            target.display()
+        );
+    }
+    Ok(state)
+}
+
 pub fn init(path: Option<PathBuf>) -> Result<()> {
     let target = path.unwrap_or_else(|| PathBuf::from("."));
+    check_target(&target)?;
     fs::create_dir_all(&target)
         .with_context(|| format!("Failed to create target directory {}", target.display()))?;
     run_init(&target)
@@ -549,5 +621,116 @@ mod tests {
         assert!(TEMPLATE_CLAUDE_MD.contains("stmo-cli"));
         assert!(TEMPLATE_CLAUDE_MD.contains("Quick Reference"));
         assert!(TEMPLATE_CLAUDE_MD.contains("snippets"));
+    }
+
+    #[test]
+    fn test_classify_new_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path().join("does-not-exist-yet");
+        assert_eq!(classify_target(&target).unwrap(), TargetState::New);
+    }
+
+    #[test]
+    fn test_classify_empty_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        assert_eq!(
+            classify_target(temp_dir.path()).unwrap(),
+            TargetState::Empty
+        );
+    }
+
+    #[test]
+    fn test_classify_existing_scaffold() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::create_dir_all(temp_dir.path().join("queries")).unwrap();
+        fs::write(temp_dir.path().join("queries/.gitkeep"), "").unwrap();
+        assert_eq!(
+            classify_target(temp_dir.path()).unwrap(),
+            TargetState::ExistingScaffold
+        );
+    }
+
+    #[test]
+    fn test_classify_tolerates_bare_git_repo() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::create_dir_all(temp_dir.path().join(".git")).unwrap();
+        fs::write(temp_dir.path().join("README.md"), "# hi").unwrap();
+        assert_eq!(
+            classify_target(temp_dir.path()).unwrap(),
+            TargetState::ExistingScaffold
+        );
+    }
+
+    #[test]
+    fn test_classify_rejects_unrelated_files() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::create_dir_all(temp_dir.path().join("Documents")).unwrap();
+        fs::write(temp_dir.path().join(".zshrc"), "").unwrap();
+
+        let TargetState::Unrelated(entries) = classify_target(temp_dir.path()).unwrap() else {
+            panic!("expected Unrelated");
+        };
+        assert!(entries.contains(&"Documents".to_string()));
+        assert!(entries.contains(&".zshrc".to_string()));
+    }
+
+    #[test]
+    fn test_classify_rejects_editor_directories() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::create_dir_all(temp_dir.path().join(".vscode")).unwrap();
+
+        let TargetState::Unrelated(entries) = classify_target(temp_dir.path()).unwrap() else {
+            panic!("expected Unrelated");
+        };
+        assert_eq!(entries, vec![".vscode".to_string()]);
+    }
+
+    #[test]
+    fn test_classify_target_is_a_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path().join("not-a-directory");
+        fs::write(&target, "hi").unwrap();
+
+        assert!(classify_target(&target).is_err());
+    }
+
+    #[test]
+    fn test_check_target_bails_on_unrelated_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::create_dir_all(temp_dir.path().join("Documents")).unwrap();
+        fs::write(temp_dir.path().join(".zshrc"), "").unwrap();
+
+        let err = check_target(temp_dir.path()).unwrap_err();
+        let message = err.to_string();
+        assert!(message.contains("Documents"));
+        assert!(message.contains(".zshrc"));
+    }
+
+    #[test]
+    fn test_init_refuses_unrelated_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path().join("home");
+        fs::create_dir_all(target.join("Documents")).unwrap();
+        fs::write(target.join(".zshrc"), "").unwrap();
+
+        assert!(init(Some(target.clone())).is_err());
+
+        assert!(!target.join(".git").exists());
+        assert!(!target.join(".pre-commit-config.yaml").exists());
+        assert!(!target.join("queries").exists());
+    }
+
+    #[test]
+    fn test_init_allows_rerun_in_existing_scaffold() {
+        let temp_dir = TempDir::new().unwrap();
+        for file in SCAFFOLD_FILES {
+            fs::write(temp_dir.path().join(file.path), file.content).unwrap();
+        }
+        fs::create_dir_all(temp_dir.path().join("queries")).unwrap();
+        fs::write(temp_dir.path().join("queries/.gitkeep"), "").unwrap();
+        fs::create_dir_all(temp_dir.path().join("dashboards")).unwrap();
+        fs::write(temp_dir.path().join("dashboards/.gitkeep"), "").unwrap();
+
+        assert!(check_target(temp_dir.path()).is_ok());
     }
 }
