@@ -127,7 +127,7 @@ pub struct MultiValuesOptions {
     pub quote_character: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Schedule {
     #[serde(default, deserialize_with = "deserialize_interval")]
     pub interval: Option<u64>,

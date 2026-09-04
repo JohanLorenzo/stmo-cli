@@ -423,7 +423,7 @@ dashboards discover|fetch SLUGS|deploy SLUGS [--all]|archive SLUGS|unarchive SLU
 snippets list|fetch [IDs] [--all]|deploy [IDs] [--all]|delete IDs
 
 schedule IDs --interval SECS [--time HH:MM] [--day-of-week N] | schedule IDs --clear (writes YAML; run deploy to push)
-deploy: uses git diff by default; --all required outside a git repo
+deploy: no args = only queries that differ from the server-stored copy (no git needed); --all deploys regardless of differences
 execute ID: deploys local .sql/.yaml first if it differs from the server-stored query, then always runs the up-to-date server copy
 archive IDs: archives on server + deletes local | archive --cleanup: deletes local only for already-archived (does NOT archive on server)
 dashboards: addressed by slug not ID; only favorited dashboards appear in dashboards discover
