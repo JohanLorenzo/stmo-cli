@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const TEMPLATE_PRE_COMMIT: &str = include_str!("../../templates/init/pre-commit-config.yaml");
@@ -277,8 +277,14 @@ fn init_in(target_dir: &Path) -> Result<bool> {
     Ok(true)
 }
 
-pub fn init() -> Result<()> {
-    let target_dir = Path::new(".");
+pub fn init(path: Option<PathBuf>) -> Result<()> {
+    let target = path.unwrap_or_else(|| PathBuf::from("."));
+    fs::create_dir_all(&target)
+        .with_context(|| format!("Failed to create target directory {}", target.display()))?;
+    run_init(&target)
+}
+
+fn run_init(target_dir: &Path) -> Result<()> {
     let files_created = init_in(target_dir)?;
 
     if files_created && git_available() {
@@ -298,6 +304,9 @@ pub fn init() -> Result<()> {
     if files_created {
         println!("\n✓ Repository scaffolded successfully");
         println!("\nNext steps:");
+        if target_dir != Path::new(".") {
+            println!("  0. cd {}", target_dir.display());
+        }
         println!("  1. Set REDASH_API_KEY environment variable");
         println!("  2. Run 'stmo-cli discover' to see available queries");
         println!("  3. Run 'stmo-cli fetch <id>' to download queries");
@@ -486,6 +495,41 @@ mod tests {
             commit_count, 1,
             "init should create exactly one commit, not an amend"
         );
+    }
+
+    // These two tests exercise the target-resolution behavior that `init()` adds
+    // (create the directory if missing, scaffold there instead of the cwd) via
+    // `init_in` rather than the public `init()`. `init()` additionally runs
+    // `install_precommit_hooks` after scaffolding, which shells out to the
+    // system `pre-commit` binary and is unrelated to what these tests check;
+    // `test_init_defaults_to_current_directory` (tests/init_command.rs) covers
+    // the full public entry point end to end.
+    #[test]
+    fn test_init_creates_missing_target_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path().join("new");
+        assert!(!target.exists());
+
+        fs::create_dir_all(&target).unwrap();
+        init_in(&target).unwrap();
+
+        assert!(target.join(".pre-commit-config.yaml").exists());
+        assert!(target.join("queries/.gitkeep").exists());
+    }
+
+    #[test]
+    fn test_init_scaffolds_into_given_path_not_cwd() {
+        let temp_dir = TempDir::new().unwrap();
+        let cwd_marker = temp_dir.path().join("cwd-marker");
+        fs::create_dir_all(&cwd_marker).unwrap();
+        let target = temp_dir.path().join("target");
+
+        fs::create_dir_all(&target).unwrap();
+        init_in(&target).unwrap();
+
+        assert!(target.join(".pre-commit-config.yaml").exists());
+        assert!(!cwd_marker.join(".pre-commit-config.yaml").exists());
+        assert!(!cwd_marker.join("queries").exists());
     }
 
     #[test]
