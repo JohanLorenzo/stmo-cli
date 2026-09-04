@@ -34,7 +34,7 @@ parameter schema, so inline any values directly in the SQL.
 ### Queries
 **discover**: List your own queries (IDs + names). With `--search TEXT` (short: `-q`), performs a full-text search across all queries and dashboards; `--limit N` caps results per section (default 50)
 **fetch**: Download queries (`--all` for tracked, or `<ids>`)
-**deploy**: Upload changes (no args = git-changed files only or all if not in a git repo, `--all` for everything, or `<ids>`)
+**deploy**: Upload changes (no args = only queries whose local content differs from Redash, `--all` for everything regardless of differences, or `<ids>`)
 **execute**: Run a tracked query by ID (deploys local changes first if they differ from the server); `--param key=val`, `--format table|json`, `--interactive`
 **execute --data-source ID**: Run ad-hoc SQL (stdin or `--file PATH`) against a data source, creating no tracked query — no parameter schema, so inline values directly in the SQL
 **data-sources**: List sources, `<id> --schema` for tables

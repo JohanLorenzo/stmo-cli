@@ -121,11 +121,16 @@ This creates/updates:
 ### Deploy to Redash
 
 ```bash
-stmo-cli deploy       # Deploy changed queries (detected via git status)
-stmo-cli deploy --all # Deploy all queries
+stmo-cli deploy       # Deploy queries whose local content differs from what's on Redash
+stmo-cli deploy --all # Deploy all queries regardless of differences
 ```
 
-**Warning**: This force overwrites the queries in Redash. Git is the source of truth.
+Bare `deploy` compares each tracked query's local `.sql`/`.yaml` against the server before
+pushing — no git required, and re-running it after a successful deploy pushes nothing.
+
+**Warning**: This force overwrites the queries in Redash. Your local files are the source
+of truth for what gets pushed; putting them under version control is optional but
+recommended (`stmo-cli init` can set that up for you).
 
 ### Execute Queries
 

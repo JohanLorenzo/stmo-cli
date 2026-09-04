@@ -9,6 +9,9 @@ use reqwest::{Client, header};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
+// `reqwest::Client` is internally `Arc`-ed, so cloning is cheap — this lets
+// `deploy` fan a bounded number of concurrent per-query GETs out across tasks.
+#[derive(Clone)]
 pub struct RedashClient {
     client: Client,
     base_url: String,

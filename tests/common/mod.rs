@@ -277,13 +277,17 @@ pub fn mock_get_data_source_schema_unauthorized(data_source_id: u64) -> Mock {
 }
 
 pub fn mock_get_query(query_id: u64, name: &str, is_archived: bool) -> Mock {
+    mock_get_query_with_sql(query_id, name, "SELECT 1", is_archived)
+}
+
+pub fn mock_get_query_with_sql(query_id: u64, name: &str, sql: &str, is_archived: bool) -> Mock {
     Mock::given(method("GET"))
         .and(path(format!("/api/queries/{query_id}")))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "id": query_id,
             "name": name,
             "description": null,
-            "query": "SELECT 1",
+            "query": sql,
             "data_source_id": 63,
             "user": null,
             "schedule": null,
@@ -295,6 +299,12 @@ pub fn mock_get_query(query_id: u64, name: &str, is_archived: bool) -> Mock {
             "updated_at": "2026-01-21T10:00:00",
             "created_at": "2026-01-21T10:00:00"
         })))
+}
+
+pub fn mock_get_query_not_found(query_id: u64) -> Mock {
+    Mock::given(method("GET"))
+        .and(path(format!("/api/queries/{query_id}")))
+        .respond_with(ResponseTemplate::new(404))
 }
 
 pub fn mock_get_query_with_parameters(
