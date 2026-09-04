@@ -121,7 +121,8 @@ the original file — real style/structure feedback without needing a full stand
 
 1. Create `0-{slug}.sql` + `0-{slug}.yaml` with `id: 0`
 2. `stmo-cli deploy` → creates query in Redash and auto-renames local files to `{new-id}-{slug}.*`
-3. Commit the renamed `{new-id}-{slug}.*` files — **never commit `0-*.` files**
+3. If this repo is under version control, commit the renamed `{new-id}-{slug}.*` files —
+   **never commit `0-*.` files**
 
 ## Dashboard Creation
 
@@ -133,7 +134,8 @@ the original file — real style/structure feedback without needing a full stand
 
 1. Create `snippets/0-{trigger}.sql` + `snippets/0-{trigger}.yaml` with `id: 0`
 2. `stmo-cli snippets deploy 0` → creates the snippet in Redash and auto-renames local files to `{new-id}-{trigger}.*`
-3. Commit the renamed `{new-id}-{trigger}.*` files — **never commit `0-*.` files**
+3. If this repo is under version control, commit the renamed `{new-id}-{trigger}.*` files —
+   **never commit `0-*.` files**
 
 ## Query/Dashboard/Snippet Authoring
 

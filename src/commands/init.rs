@@ -1,7 +1,9 @@
 #![allow(clippy::missing_errors_doc)]
 
 use anyhow::{Context, Result};
+use dialoguer::Confirm;
 use std::fs;
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -17,12 +19,13 @@ struct ScaffoldFile {
     description: &'static str,
 }
 
-const SCAFFOLD_FILES: &[ScaffoldFile] = &[
-    ScaffoldFile {
-        path: ".pre-commit-config.yaml",
-        content: TEMPLATE_PRE_COMMIT,
-        description: "pre-commit hooks config",
-    },
+const GIT_FILES: &[ScaffoldFile] = &[ScaffoldFile {
+    path: ".gitignore",
+    content: TEMPLATE_GITIGNORE,
+    description: "git ignore rules",
+}];
+
+const LINTER_FILES: &[ScaffoldFile] = &[
     ScaffoldFile {
         path: ".sqlfluff",
         content: TEMPLATE_SQLFLUFF,
@@ -33,17 +36,48 @@ const SCAFFOLD_FILES: &[ScaffoldFile] = &[
         content: TEMPLATE_YAMLLINT,
         description: "yamllint config",
     },
-    ScaffoldFile {
-        path: ".gitignore",
-        content: TEMPLATE_GITIGNORE,
-        description: "git ignore rules",
-    },
-    ScaffoldFile {
-        path: "CLAUDE.md",
-        content: TEMPLATE_CLAUDE_MD,
-        description: "AI assistant instructions",
-    },
 ];
+
+const PRECOMMIT_FILES: &[ScaffoldFile] = &[ScaffoldFile {
+    path: ".pre-commit-config.yaml",
+    content: TEMPLATE_PRE_COMMIT,
+    description: "pre-commit hooks config",
+}];
+
+const CLAUDE_MD_FILE: ScaffoldFile = ScaffoldFile {
+    path: "CLAUDE.md",
+    content: TEMPLATE_CLAUDE_MD,
+    description: "AI assistant instructions",
+};
+
+// Every filename `init` might ever write, across all choice combinations —
+// used to recognize an existing scaffold regardless of which features a past
+// run opted into.
+const KNOWN_SCAFFOLD_PATHS: &[&str] = &[
+    ".gitignore",
+    ".sqlfluff",
+    ".yamllint",
+    ".pre-commit-config.yaml",
+    "CLAUDE.md",
+];
+
+// Five independent yes/no wizard answers, not state-machine states — a
+// state machine or nested enums would model relationships that don't exist
+// here (e.g. `linters` and `claude_md` are fully orthogonal to each other).
+#[allow(clippy::struct_excessive_bools)]
+pub struct InitChoices {
+    pub git: bool,
+    pub commit: bool,
+    pub linters: bool,
+    pub precommit: bool,
+    pub claude_md: bool,
+}
+
+#[derive(Debug)]
+struct Summary {
+    files_created: usize,
+    committed: bool,
+}
 
 fn write_if_missing(target_dir: &Path, file: &ScaffoldFile) -> Result<bool> {
     let file_path = target_dir.join(file.path);
@@ -61,21 +95,33 @@ fn write_if_missing(target_dir: &Path, file: &ScaffoldFile) -> Result<bool> {
     }
 }
 
-fn create_directory_with_gitkeep(target_dir: &Path, dir_name: &str) -> Result<bool> {
+// Idempotence is keyed on `.gitkeep` when git is involved (so a later `init`
+// run that turns git on retroactively adds the marker) and on the directory
+// itself otherwise, since a git-less scaffold never writes `.gitkeep`.
+fn create_directory(target_dir: &Path, dir_name: &str, with_gitkeep: bool) -> Result<bool> {
     let dir_path = target_dir.join(dir_name);
-    let gitkeep_path = dir_path.join(".gitkeep");
-
-    if gitkeep_path.exists() {
-        println!("  ⊘ {dir_name}/  (already exists)");
-        Ok(false)
+    let already_exists = if with_gitkeep {
+        dir_path.join(".gitkeep").exists()
     } else {
-        fs::create_dir_all(&dir_path)
-            .with_context(|| format!("Failed to create {dir_name} directory"))?;
-        fs::write(&gitkeep_path, "")
+        dir_path.exists()
+    };
+
+    if already_exists {
+        println!("  ⊘ {dir_name}/  (already exists)");
+        return Ok(false);
+    }
+
+    fs::create_dir_all(&dir_path)
+        .with_context(|| format!("Failed to create {dir_name} directory"))?;
+
+    if with_gitkeep {
+        fs::write(dir_path.join(".gitkeep"), "")
             .with_context(|| format!("Failed to write {dir_name}/.gitkeep"))?;
         println!("  ✓ {dir_name}/  (directory with .gitkeep)");
-        Ok(true)
+    } else {
+        println!("  ✓ {dir_name}/");
     }
+    Ok(true)
 }
 
 fn git_available() -> bool {
@@ -133,20 +179,7 @@ fn ensure_git_identity(target_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-fn detect_os() -> &'static str {
-    if cfg!(target_os = "macos") {
-        "macos"
-    } else if cfg!(target_os = "linux") {
-        "linux"
-    } else {
-        "other"
-    }
-}
-
 fn try_precommit_autoupdate(target_dir: &Path) -> bool {
-    if !precommit_available() {
-        return false;
-    }
     let output = Command::new("pre-commit")
         .arg("autoupdate")
         .current_dir(target_dir)
@@ -172,109 +205,152 @@ fn install_precommit_hooks(target_dir: &Path) -> Result<()> {
 
     if !install_output.status.success() {
         let stderr = String::from_utf8_lossy(&install_output.stderr);
-        anyhow::bail!("pre-commit install failed: {stderr}");
+        anyhow::bail!(
+            "pre-commit install failed: {stderr}\nThe directory at {} was already scaffolded — \
+             run 'pre-commit install' there yourself.",
+            target_dir.display()
+        );
     }
     println!("  ✓ Installed pre-commit git hooks");
     Ok(())
 }
 
-fn setup_git_repo(target_dir: &Path, files_created: bool) -> Result<()> {
+fn init_git_repo(target_dir: &Path) -> Result<bool> {
     let git_dir = target_dir.join(".git");
-
-    if !git_dir.exists() {
-        println!("\n⚙ Initializing git repository...");
-        let status = clean_git_cmd()
-            .arg("init")
-            .current_dir(target_dir)
-            .status()
-            .context("Failed to run git init")?;
-
-        if !status.success() {
-            anyhow::bail!("git init failed");
-        }
-    }
-
-    ensure_git_identity(target_dir)?;
-
-    if files_created {
-        println!("⚙ Creating initial commit...");
-
-        let add_status = clean_git_cmd()
-            .args(["add", "."])
-            .current_dir(target_dir)
-            .status()
-            .context("Failed to run git add")?;
-
-        if !add_status.success() {
-            anyhow::bail!("git add failed");
-        }
-
-        let commit_output = clean_git_cmd()
-            .args([
-                "commit",
-                "-m",
-                "Initial commit: scaffold query/dashboard repository",
-            ])
-            .current_dir(target_dir)
-            .output()
-            .context("Failed to run git commit")?;
-
-        if !commit_output.status.success() {
-            let stderr = String::from_utf8_lossy(&commit_output.stderr);
-            anyhow::bail!("git commit failed: {stderr}");
-        }
-
-        println!("  ✓ Initial commit created");
-    }
-
-    Ok(())
-}
-
-fn init_in(target_dir: &Path) -> Result<bool> {
-    println!("Scaffolding query/dashboard repository...\n");
-
-    let mut files_created = 0;
-    let mut files_skipped = 0;
-
-    for file in SCAFFOLD_FILES {
-        if write_if_missing(target_dir, file)? {
-            files_created += 1;
-        } else {
-            files_skipped += 1;
-        }
-    }
-
-    if create_directory_with_gitkeep(target_dir, "queries")? {
-        files_created += 1;
-    } else {
-        files_skipped += 1;
-    }
-
-    if create_directory_with_gitkeep(target_dir, "dashboards")? {
-        files_created += 1;
-    } else {
-        files_skipped += 1;
-    }
-
-    println!("\n📊 Summary: {files_created} created, {files_skipped} skipped");
-
-    if files_created == 0 {
-        println!("\n✓ Repository already initialized");
+    if git_dir.exists() {
         return Ok(false);
     }
 
-    if git_available() {
-        if precommit_available() {
-            println!("\n⚙ Setting up pre-commit...");
-            try_precommit_autoupdate(target_dir);
-        }
-        setup_git_repo(target_dir, files_created > 0)?;
-    } else {
-        println!("\n⚠ git is not installed - files created but not committed");
-        println!("  Install git to enable version control");
+    println!("\n⚙ Initializing git repository...");
+    let status = clean_git_cmd()
+        .arg("init")
+        .current_dir(target_dir)
+        .status()
+        .context("Failed to run git init")?;
+
+    if !status.success() {
+        anyhow::bail!("git init failed");
+    }
+    Ok(true)
+}
+
+fn create_initial_commit(target_dir: &Path) -> Result<bool> {
+    ensure_git_identity(target_dir)?;
+
+    println!("⚙ Creating initial commit...");
+
+    let add_status = clean_git_cmd()
+        .args(["add", "."])
+        .current_dir(target_dir)
+        .status()
+        .context("Failed to run git add")?;
+
+    if !add_status.success() {
+        anyhow::bail!("git add failed");
     }
 
+    let commit_output = clean_git_cmd()
+        .args([
+            "commit",
+            "-m",
+            "Initial commit: scaffold query/dashboard repository",
+        ])
+        .current_dir(target_dir)
+        .output()
+        .context("Failed to run git commit")?;
+
+    if !commit_output.status.success() {
+        let stderr = String::from_utf8_lossy(&commit_output.stderr);
+        anyhow::bail!(
+            "git commit failed: {stderr}\nThe directory at {} was already scaffolded — \
+             commit manually when ready.",
+            target_dir.display()
+        );
+    }
+
+    println!("  ✓ Initial commit created");
     Ok(true)
+}
+
+fn scaffold(target_dir: &Path, choices: &InitChoices) -> Result<Summary> {
+    println!("Scaffolding query/dashboard repository...\n");
+
+    let mut files_created = 0;
+
+    if create_directory(target_dir, "queries", choices.git)? {
+        files_created += 1;
+    }
+    if create_directory(target_dir, "dashboards", choices.git)? {
+        files_created += 1;
+    }
+
+    if choices.git {
+        for file in GIT_FILES {
+            if write_if_missing(target_dir, file)? {
+                files_created += 1;
+            }
+        }
+    }
+    if choices.linters {
+        for file in LINTER_FILES {
+            if write_if_missing(target_dir, file)? {
+                files_created += 1;
+            }
+        }
+    }
+    // A pre-commit config is only meaningful alongside a git repo (hooks live
+    // under `.git/hooks/`), so this stays nested under `choices.git` even
+    // though `prompt_choices` already never offers `precommit` without it.
+    if choices.git && choices.precommit {
+        for file in PRECOMMIT_FILES {
+            if write_if_missing(target_dir, file)? {
+                files_created += 1;
+            }
+        }
+    }
+    if choices.claude_md && write_if_missing(target_dir, &CLAUDE_MD_FILE)? {
+        files_created += 1;
+    }
+
+    println!("\n📊 Summary: {files_created} item(s) created");
+
+    let mut committed = false;
+
+    if choices.git {
+        if !git_available() {
+            anyhow::bail!(
+                "git was requested, but the `git` binary was not found on PATH.\n\
+                 Files were scaffolded at {}; install git and run 'git init' there yourself.",
+                target_dir.display()
+            );
+        }
+
+        init_git_repo(target_dir)?;
+
+        if choices.precommit {
+            if !precommit_available() {
+                anyhow::bail!(
+                    "pre-commit hooks were requested, but the `pre-commit` binary was not found \
+                     on PATH.\nFiles were scaffolded at {}; install pre-commit and run \
+                     'pre-commit install' there yourself.",
+                    target_dir.display()
+                );
+            }
+            println!("\n⚙ Setting up pre-commit...");
+            try_precommit_autoupdate(target_dir);
+            println!("\n⚙ Installing pre-commit hooks...");
+            install_precommit_hooks(target_dir)?;
+        }
+
+        if choices.commit && files_created > 0 {
+            committed = create_initial_commit(target_dir)?;
+        }
+    }
+
+    Ok(Summary {
+        files_created,
+        committed,
+    })
 }
 
 #[derive(Debug, PartialEq)]
@@ -286,7 +362,7 @@ enum TargetState {
 }
 
 fn tolerated_entry(name: &str) -> bool {
-    if SCAFFOLD_FILES.iter().any(|f| f.path == name) {
+    if KNOWN_SCAFFOLD_PATHS.contains(&name) {
         return true;
     }
     matches!(
@@ -348,44 +424,117 @@ fn check_target(target: &Path) -> Result<TargetState> {
     Ok(state)
 }
 
-pub fn init(path: Option<PathBuf>) -> Result<()> {
-    let target = path.unwrap_or_else(|| PathBuf::from("."));
-    check_target(&target)?;
-    fs::create_dir_all(&target)
-        .with_context(|| format!("Failed to create target directory {}", target.display()))?;
-    run_init(&target)
+fn prompt_choices() -> Result<InitChoices> {
+    let git = Confirm::new()
+        .with_prompt("Initialize a git repository?")
+        .default(false)
+        .interact()?;
+
+    let commit = git
+        && Confirm::new()
+            .with_prompt("Create an initial commit?")
+            .default(false)
+            .interact()?;
+
+    let linters = Confirm::new()
+        .with_prompt("Add linter configs (.sqlfluff, .yamllint)?")
+        .default(true)
+        .interact()?;
+
+    let precommit = git
+        && linters
+        && precommit_available()
+        && Confirm::new()
+            .with_prompt("Install pre-commit hooks?")
+            .default(false)
+            .interact()?;
+
+    let claude_md = Confirm::new()
+        .with_prompt("Add CLAUDE.md for AI assistants?")
+        .default(true)
+        .interact()?;
+
+    Ok(InitChoices {
+        git,
+        commit,
+        linters,
+        precommit,
+        claude_md,
+    })
 }
 
-fn run_init(target_dir: &Path) -> Result<()> {
-    let files_created = init_in(target_dir)?;
+fn print_next_steps(target_dir: &Path, choices: &InitChoices, summary: &Summary) {
+    if summary.files_created == 0 {
+        println!("\n✓ Repository already initialized");
+        return;
+    }
 
-    if files_created && git_available() {
-        if precommit_available() {
-            println!("\n⚙ Installing pre-commit hooks...");
-            install_precommit_hooks(target_dir)?;
+    println!("\n✓ Repository scaffolded successfully");
+
+    if choices.git && !summary.committed {
+        if choices.commit {
+            println!("  (nothing new to commit)");
         } else {
-            println!("\n⚠ pre-commit is not installed");
-            match detect_os() {
-                "macos" => println!("  Install with: brew install pre-commit"),
-                _ => println!("  Install with: pip install pre-commit"),
-            }
-            println!("  After installing, re-run 'stmo-cli init' to finish setup.");
+            println!(
+                "  Nothing committed. To commit: git -C {} add . && git -C {} commit -m \"Initial commit\"",
+                target_dir.display(),
+                target_dir.display()
+            );
         }
+    } else if !choices.git {
+        println!(
+            "  Tip: to version these files, run: git -C {} init && git -C {} add . && \
+             git -C {} commit -m \"Initial commit\"",
+            target_dir.display(),
+            target_dir.display(),
+            target_dir.display()
+        );
     }
 
-    if files_created {
-        println!("\n✓ Repository scaffolded successfully");
-        println!("\nNext steps:");
-        if target_dir != Path::new(".") {
-            println!("  0. cd {}", target_dir.display());
-        }
-        println!("  1. Set REDASH_API_KEY environment variable");
-        println!("  2. Run 'stmo-cli discover' to see available queries");
-        println!("  3. Run 'stmo-cli fetch <id>' to download queries");
-        println!("  4. Run 'stmo-cli deploy' to push changes back to Redash");
+    println!("\nNext steps:");
+    if target_dir != Path::new(".") {
+        println!("  0. cd {}", target_dir.display());
     }
+    println!("  1. Set REDASH_API_KEY environment variable");
+    println!("  2. Run 'stmo-cli discover' to see available queries");
+    println!("  3. Run 'stmo-cli fetch <id>' to download queries");
+    println!("  4. Run 'stmo-cli deploy' to push changes back to Redash");
+}
+
+// A bare `stmo-cli init` (no PATH argument) scaffolds the current directory.
+fn resolve_target(path: Option<PathBuf>) -> PathBuf {
+    path.unwrap_or_else(|| PathBuf::from("."))
+}
+
+fn init_impl(
+    path: Option<PathBuf>,
+    is_terminal: impl Fn() -> bool,
+    prompt: impl FnOnce() -> Result<InitChoices>,
+) -> Result<()> {
+    let target = resolve_target(path);
+    check_target(&target)?;
+
+    if !is_terminal() {
+        anyhow::bail!(
+            "stmo-cli init needs a terminal to ask what to set up.\nRun it yourself in your \
+             own terminal, e.g.:\n  stmo-cli init {}",
+            target.display()
+        );
+    }
+
+    let choices = prompt()?;
+
+    fs::create_dir_all(&target)
+        .with_context(|| format!("Failed to create target directory {}", target.display()))?;
+
+    let summary = scaffold(&target, &choices)?;
+    print_next_steps(&target, &choices, &summary);
 
     Ok(())
+}
+
+pub fn init(path: Option<PathBuf>) -> Result<()> {
+    init_impl(path, || std::io::stdin().is_terminal(), prompt_choices)
 }
 
 #[cfg(test)]
@@ -412,170 +561,49 @@ mod tests {
             .unwrap();
     }
 
-    #[test]
-    fn test_init_creates_all_files() {
-        let temp_dir = TempDir::new().unwrap();
-        init_in(temp_dir.path()).unwrap();
-
-        assert!(temp_dir.path().join(".pre-commit-config.yaml").exists());
-        assert!(temp_dir.path().join(".sqlfluff").exists());
-        assert!(temp_dir.path().join(".yamllint").exists());
-        assert!(temp_dir.path().join(".gitignore").exists());
-        assert!(temp_dir.path().join("CLAUDE.md").exists());
-        assert!(temp_dir.path().join("queries/.gitkeep").exists());
-        assert!(temp_dir.path().join("dashboards/.gitkeep").exists());
-
-        let pre_commit_content =
-            fs::read_to_string(temp_dir.path().join(".pre-commit-config.yaml")).unwrap();
-        assert!(pre_commit_content.contains("yamllint"));
-        assert!(pre_commit_content.contains("sqlfluff"));
-
-        let sqlfluff_content = fs::read_to_string(temp_dir.path().join(".sqlfluff")).unwrap();
-        assert!(sqlfluff_content.contains("bigquery"));
-        assert!(sqlfluff_content.contains("jinja"));
-
-        let claude_md_content = fs::read_to_string(temp_dir.path().join("CLAUDE.md")).unwrap();
-        assert!(claude_md_content.contains("stmo-cli"));
-        assert!(!claude_md_content.contains("cargo run"));
+    fn commit_count(dir: &std::path::Path) -> usize {
+        let log_output = clean_git(dir).args(["log", "--oneline"]).output().unwrap();
+        String::from_utf8_lossy(&log_output.stdout).lines().count()
     }
 
-    #[test]
-    fn test_init_skips_existing_files() {
-        let temp_dir = TempDir::new().unwrap();
-
-        let sqlfluff_path = temp_dir.path().join(".sqlfluff");
-        fs::write(&sqlfluff_path, "custom content").unwrap();
-
-        init_in(temp_dir.path()).unwrap();
-
-        let content = fs::read_to_string(&sqlfluff_path).unwrap();
-        assert_eq!(content, "custom content");
-
-        assert!(temp_dir.path().join(".pre-commit-config.yaml").exists());
-        assert!(temp_dir.path().join("queries/.gitkeep").exists());
-    }
-
-    #[test]
-    fn test_init_creates_git_repo() {
-        let temp_dir = TempDir::new().unwrap();
-
-        if !git_available() {
-            return;
+    fn all_choices() -> InitChoices {
+        InitChoices {
+            git: true,
+            commit: true,
+            linters: true,
+            precommit: false,
+            claude_md: true,
         }
+    }
 
-        init_in(temp_dir.path()).unwrap();
-
-        assert!(temp_dir.path().join(".git").exists());
-
-        let log_output = clean_git(temp_dir.path())
-            .args(["log", "--oneline"])
-            .output()
-            .unwrap();
-
-        let log = String::from_utf8_lossy(&log_output.stdout);
-        assert!(log.contains("Initial commit"));
+    fn no_choices() -> InitChoices {
+        InitChoices {
+            git: false,
+            commit: false,
+            linters: false,
+            precommit: false,
+            claude_md: false,
+        }
     }
 
     #[test]
-    fn test_init_commits_to_existing_repo() {
-        let temp_dir = TempDir::new().unwrap();
-
-        if !git_available() {
-            return;
-        }
-
-        setup_test_repo(temp_dir.path());
-
-        fs::write(temp_dir.path().join("existing.txt"), "test").unwrap();
-        clean_git(temp_dir.path())
-            .args(["add", "."])
-            .status()
-            .unwrap();
-        clean_git(temp_dir.path())
-            .args(["commit", "-m", "First commit"])
-            .status()
-            .unwrap();
-
-        init_in(temp_dir.path()).unwrap();
-
-        let log_output = clean_git(temp_dir.path())
-            .args(["log", "--oneline"])
-            .output()
-            .unwrap();
-
-        let log = String::from_utf8_lossy(&log_output.stdout);
-        let commit_count = log.lines().count();
-        assert!(commit_count >= 2);
+    fn test_resolve_target_defaults_to_dot() {
+        assert_eq!(resolve_target(None), PathBuf::from("."));
     }
 
     #[test]
-    fn test_init_no_commit_when_all_exist() {
-        let temp_dir = TempDir::new().unwrap();
-
-        if !git_available() {
-            return;
-        }
-
-        for file in SCAFFOLD_FILES {
-            fs::write(temp_dir.path().join(file.path), file.content).unwrap();
-        }
-        fs::create_dir_all(temp_dir.path().join("queries")).unwrap();
-        fs::write(temp_dir.path().join("queries/.gitkeep"), "").unwrap();
-        fs::create_dir_all(temp_dir.path().join("dashboards")).unwrap();
-        fs::write(temp_dir.path().join("dashboards/.gitkeep"), "").unwrap();
-
-        setup_test_repo(temp_dir.path());
-        clean_git(temp_dir.path())
-            .args(["add", "."])
-            .status()
-            .unwrap();
-        clean_git(temp_dir.path())
-            .args(["commit", "-m", "Existing commit"])
-            .status()
-            .unwrap();
-
-        init_in(temp_dir.path()).unwrap();
-
-        let log_output = clean_git(temp_dir.path())
-            .args(["log", "--oneline"])
-            .output()
-            .unwrap();
-
-        let log = String::from_utf8_lossy(&log_output.stdout);
-        let commit_count = log.lines().count();
-        assert_eq!(commit_count, 1);
+    fn test_resolve_target_uses_given_path() {
+        let path = PathBuf::from("/tmp/somewhere");
+        assert_eq!(resolve_target(Some(path.clone())), path);
     }
 
-    #[test]
-    fn test_init_produces_single_commit() {
-        let temp_dir = TempDir::new().unwrap();
-
-        if !git_available() {
-            return;
-        }
-
-        init_in(temp_dir.path()).unwrap();
-
-        let log_output = clean_git(temp_dir.path())
-            .args(["log", "--oneline"])
-            .output()
-            .unwrap();
-
-        let log = String::from_utf8_lossy(&log_output.stdout);
-        let commit_count = log.lines().count();
-        assert_eq!(
-            commit_count, 1,
-            "init should create exactly one commit, not an amend"
-        );
-    }
-
-    // These two tests exercise the target-resolution behavior that `init()` adds
-    // (create the directory if missing, scaffold there instead of the cwd) via
-    // `init_in` rather than the public `init()`. `init()` additionally runs
-    // `install_precommit_hooks` after scaffolding, which shells out to the
-    // system `pre-commit` binary and is unrelated to what these tests check;
-    // `test_init_defaults_to_current_directory` (tests/init_command.rs) covers
-    // the full public entry point end to end.
+    // These two tests exercise the target-resolution behavior that `init()`
+    // adds (create the directory if missing, scaffold there instead of the
+    // cwd) via `scaffold` directly, so they don't depend on the `pre-commit`
+    // binary at all. `init()` now requires a real terminal (the wizard needs
+    // one to prompt in), so calling the full public entry point with no PATH
+    // can no longer be exercised from a non-interactive test process at all —
+    // see the interactive check in the plan instead.
     #[test]
     fn test_init_creates_missing_target_directory() {
         let temp_dir = TempDir::new().unwrap();
@@ -583,10 +611,9 @@ mod tests {
         assert!(!target.exists());
 
         fs::create_dir_all(&target).unwrap();
-        init_in(&target).unwrap();
+        scaffold(&target, &no_choices()).unwrap();
 
-        assert!(target.join(".pre-commit-config.yaml").exists());
-        assert!(target.join("queries/.gitkeep").exists());
+        assert!(target.join("queries").exists());
     }
 
     #[test]
@@ -596,12 +623,228 @@ mod tests {
         fs::create_dir_all(&cwd_marker).unwrap();
         let target = temp_dir.path().join("target");
 
+        let mut choices = no_choices();
+        choices.claude_md = true;
         fs::create_dir_all(&target).unwrap();
-        init_in(&target).unwrap();
+        scaffold(&target, &choices).unwrap();
 
-        assert!(target.join(".pre-commit-config.yaml").exists());
-        assert!(!cwd_marker.join(".pre-commit-config.yaml").exists());
+        assert!(target.join("CLAUDE.md").exists());
+        assert!(!cwd_marker.join("CLAUDE.md").exists());
         assert!(!cwd_marker.join("queries").exists());
+    }
+
+    #[test]
+    fn test_scaffold_all_declined_creates_only_directories() {
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path();
+
+        scaffold(target, &no_choices()).unwrap();
+
+        assert!(target.join("queries").exists());
+        assert!(target.join("dashboards").exists());
+        assert!(!target.join("queries/.gitkeep").exists());
+        assert!(!target.join(".gitignore").exists());
+        assert!(!target.join(".sqlfluff").exists());
+        assert!(!target.join(".yamllint").exists());
+        assert!(!target.join(".pre-commit-config.yaml").exists());
+        assert!(!target.join("CLAUDE.md").exists());
+        assert!(!target.join(".git").exists());
+    }
+
+    #[test]
+    fn test_scaffold_linters_only() {
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path();
+
+        let mut choices = no_choices();
+        choices.linters = true;
+        scaffold(target, &choices).unwrap();
+
+        assert!(target.join(".sqlfluff").exists());
+        assert!(target.join(".yamllint").exists());
+        assert!(!target.join(".gitignore").exists());
+        assert!(!target.join("CLAUDE.md").exists());
+        assert!(!target.join(".pre-commit-config.yaml").exists());
+    }
+
+    #[test]
+    fn test_scaffold_claude_md_only() {
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path();
+
+        let mut choices = no_choices();
+        choices.claude_md = true;
+        scaffold(target, &choices).unwrap();
+
+        assert!(target.join("CLAUDE.md").exists());
+        assert!(!target.join(".sqlfluff").exists());
+    }
+
+    #[test]
+    fn test_scaffold_precommit_without_git_writes_nothing_precommit_related() {
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path();
+
+        // `precommit: true` with `git: false` can't happen through the real
+        // wizard (`prompt_choices` only offers it when git was chosen), but
+        // `scaffold` must still not write a dangling pre-commit config for it.
+        let choices = InitChoices {
+            git: false,
+            commit: false,
+            linters: true,
+            precommit: true,
+            claude_md: false,
+        };
+        scaffold(target, &choices).unwrap();
+
+        assert!(!target.join(".pre-commit-config.yaml").exists());
+        assert!(!target.join(".git").exists());
+    }
+
+    #[test]
+    fn test_scaffold_git_without_commit_creates_repo_with_zero_commits() {
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path();
+
+        if !git_available() {
+            return;
+        }
+
+        let mut choices = no_choices();
+        choices.git = true;
+        scaffold(target, &choices).unwrap();
+
+        assert!(target.join(".git").exists());
+        assert!(target.join(".gitignore").exists());
+        assert!(target.join("queries/.gitkeep").exists());
+        assert_eq!(commit_count(target), 0);
+    }
+
+    #[test]
+    fn test_scaffold_git_and_commit_creates_exactly_one_commit() {
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path();
+
+        if !git_available() {
+            return;
+        }
+
+        scaffold(target, &all_choices()).unwrap();
+
+        assert_eq!(commit_count(target), 1);
+    }
+
+    #[test]
+    fn test_scaffold_rerun_does_not_amend() {
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path();
+
+        if !git_available() {
+            return;
+        }
+
+        scaffold(target, &all_choices()).unwrap();
+        assert_eq!(commit_count(target), 1);
+
+        // Nothing new to scaffold the second time, so nothing new to commit.
+        scaffold(target, &all_choices()).unwrap();
+        assert_eq!(commit_count(target), 1);
+    }
+
+    #[test]
+    fn test_scaffold_git_requested_but_unavailable_is_fatal() {
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path();
+
+        if git_available() {
+            return;
+        }
+
+        let mut choices = no_choices();
+        choices.git = true;
+        assert!(scaffold(target, &choices).is_err());
+    }
+
+    #[test]
+    fn test_scaffold_commit_rejected_by_hook_is_fatal_and_names_scaffolded_dir() {
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path();
+
+        if !git_available() {
+            return;
+        }
+
+        setup_test_repo(target);
+        let hooks_dir = target.join(".git/hooks");
+        fs::create_dir_all(&hooks_dir).unwrap();
+        let hook_path = hooks_dir.join("pre-commit");
+        fs::write(&hook_path, "#!/bin/sh\nexit 1\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&hook_path).unwrap().permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&hook_path, perms).unwrap();
+        }
+
+        let err = scaffold(target, &all_choices()).unwrap_err();
+        let message = err.to_string();
+        assert!(message.contains("git commit failed"));
+        assert!(message.contains(&target.display().to_string()));
+
+        // The scaffold files were still written even though the commit failed.
+        assert!(target.join("CLAUDE.md").exists());
+    }
+
+    #[test]
+    fn test_init_impl_unrelated_directory_wins_over_tty_check() {
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path().join("home");
+        fs::create_dir_all(target.join("Documents")).unwrap();
+        fs::write(target.join(".zshrc"), "").unwrap();
+
+        let err =
+            init_impl(Some(target), || false, || panic!("prompt should not run")).unwrap_err();
+        assert!(err.to_string().contains("unrelated files"));
+    }
+
+    #[test]
+    fn test_init_impl_refuses_without_terminal() {
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path().join("repo");
+
+        let err =
+            init_impl(Some(target), || false, || panic!("prompt should not run")).unwrap_err();
+        assert!(err.to_string().contains("terminal"));
+    }
+
+    #[test]
+    fn test_init_impl_declining_everything_creates_only_directories() {
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path().join("repo");
+
+        init_impl(Some(target.clone()), || true, || Ok(no_choices())).unwrap();
+
+        assert!(target.join("queries").exists());
+        assert!(target.join("dashboards").exists());
+        assert!(!target.join(".git").exists());
+        assert!(!target.join("CLAUDE.md").exists());
+    }
+
+    #[test]
+    fn test_init_impl_full_flow_with_git_and_commit() {
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path().join("repo");
+
+        if !git_available() {
+            return;
+        }
+
+        init_impl(Some(target.clone()), || true, || Ok(all_choices())).unwrap();
+
+        assert!(target.join(".git").exists());
+        assert!(target.join("CLAUDE.md").exists());
+        assert_eq!(commit_count(&target), 1);
     }
 
     #[test]
@@ -723,8 +966,8 @@ mod tests {
     #[test]
     fn test_init_allows_rerun_in_existing_scaffold() {
         let temp_dir = TempDir::new().unwrap();
-        for file in SCAFFOLD_FILES {
-            fs::write(temp_dir.path().join(file.path), file.content).unwrap();
+        for path in KNOWN_SCAFFOLD_PATHS {
+            fs::write(temp_dir.path().join(path), "existing content").unwrap();
         }
         fs::create_dir_all(temp_dir.path().join("queries")).unwrap();
         fs::write(temp_dir.path().join("queries/.gitkeep"), "").unwrap();
