@@ -179,21 +179,29 @@ fn ensure_git_identity(target_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-fn try_precommit_autoupdate(target_dir: &Path) -> bool {
+// The shipped .pre-commit-config.yaml template has empty `rev: ""` fields for
+// both hooks (see templates/init/pre-commit-config.yaml) — pre-commit refuses
+// to run with an unresolved rev, so a config that never got autoupdated is
+// broken, not merely out of date. Fatal, since pre-commit was explicitly opted
+// into.
+fn precommit_autoupdate(target_dir: &Path) -> Result<()> {
     let output = Command::new("pre-commit")
         .arg("autoupdate")
         .current_dir(target_dir)
-        .output();
-    match output {
-        Ok(o) if o.status.success() => {
-            println!("  ✓ Updated hook versions in .pre-commit-config.yaml");
-            true
-        }
-        _ => {
-            println!("  ⚠ pre-commit autoupdate failed, using template versions");
-            false
-        }
+        .output()
+        .context("Failed to run pre-commit autoupdate")?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!(
+            "pre-commit autoupdate failed: {stderr}\n.pre-commit-config.yaml still has empty \
+             `rev:` fields and won't run. The directory at {} was already scaffolded — run \
+             'pre-commit autoupdate' there yourself.",
+            target_dir.display()
+        );
     }
+    println!("  ✓ Updated hook versions in .pre-commit-config.yaml");
+    Ok(())
 }
 
 fn install_precommit_hooks(target_dir: &Path) -> Result<()> {
@@ -337,7 +345,7 @@ fn scaffold(target_dir: &Path, choices: &InitChoices) -> Result<Summary> {
                 );
             }
             println!("\n⚙ Setting up pre-commit...");
-            try_precommit_autoupdate(target_dir);
+            precommit_autoupdate(target_dir)?;
             println!("\n⚙ Installing pre-commit hooks...");
             install_precommit_hooks(target_dir)?;
         }
@@ -794,6 +802,50 @@ mod tests {
 
         // The scaffold files were still written even though the commit failed.
         assert!(target.join("CLAUDE.md").exists());
+    }
+
+    #[test]
+    fn test_scaffold_precommit_autoupdate_failure_is_fatal() {
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path();
+
+        if !git_available() || !precommit_available() {
+            return;
+        }
+
+        setup_test_repo(target);
+        // Pre-seed an invalid config so `write_if_missing` leaves it alone and
+        // `pre-commit autoupdate` fails deterministically, regardless of
+        // network access.
+        fs::write(target.join(".pre-commit-config.yaml"), "not: [valid, yaml").unwrap();
+
+        let mut choices = no_choices();
+        choices.git = true;
+        choices.precommit = true;
+
+        let err = scaffold(target, &choices).unwrap_err();
+        let message = err.to_string();
+        assert!(message.contains("autoupdate failed"));
+        assert!(message.contains("rev"));
+    }
+
+    #[test]
+    fn test_scaffold_precommit_not_offered_skips_autoupdate_and_stays_ok() {
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path();
+
+        if !git_available() {
+            return;
+        }
+
+        // Same invalid config, but `precommit: false` — scaffold must not
+        // even look at it.
+        setup_test_repo(target);
+        fs::write(target.join(".pre-commit-config.yaml"), "not: [valid, yaml").unwrap();
+
+        let mut choices = no_choices();
+        choices.git = true;
+        assert!(scaffold(target, &choices).is_ok());
     }
 
     #[test]
