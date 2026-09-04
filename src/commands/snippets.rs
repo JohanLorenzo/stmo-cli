@@ -4,7 +4,6 @@ use anyhow::{Context, Result, bail};
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
-use std::process::Command;
 
 use crate::api::RedashClient;
 use crate::models::{CreateQuerySnippet, QuerySnippet, SnippetMetadata};
@@ -105,50 +104,69 @@ fn get_all_snippet_metadata() -> Result<Vec<(u64, String)>> {
     get_all_snippet_metadata_from_path(Path::new("snippets"))
 }
 
-fn parse_changed_snippet_ids(porcelain: &str) -> HashSet<u64> {
+// Shared with `deploy` — compares everything `deploy_one` actually pushes to
+// Redash against what's already there, so "changed" means "differs from the
+// server", not "differs from git's working tree".
+fn snippet_differs(
+    local_body: &str,
+    local_metadata: &SnippetMetadata,
+    server: &QuerySnippet,
+) -> bool {
+    local_body != server.snippet
+        || local_metadata.trigger != server.trigger
+        || local_metadata.description != server.description
+}
+
+fn read_local_snippet(id: u64, trigger: &str) -> Result<(String, SnippetMetadata)> {
+    let sql_path = format!("snippets/{id}-{trigger}.sql");
+    let yaml_path = format!("snippets/{id}-{trigger}.yaml");
+
+    let body = fs::read_to_string(&sql_path).context(format!("Failed to read {sql_path}"))?;
+    let metadata_content =
+        fs::read_to_string(&yaml_path).context(format!("Failed to read {yaml_path}"))?;
+    let metadata: SnippetMetadata =
+        serde_yaml::from_str(&metadata_content).context(format!("Failed to parse {yaml_path}"))?;
+
+    Ok((body, metadata))
+}
+
+// Snippets are cheap: Redash returns every snippet's full body in one list
+// call, so unlike `deploy::find_changed_queries` this needs no per-snippet
+// GET and no concurrency — just one request, then a local comparison per
+// tracked id. A snippet that fails to compare (deleted server-side,
+// unreadable local files, ...) is skipped with a warning rather than
+// aborting the whole run.
+async fn find_changed_snippets(
+    client: &RedashClient,
+    all_snippets: &[(u64, String)],
+) -> Result<HashSet<u64>> {
+    let server_snippets = client.list_query_snippets().await?;
+
     let mut changed_ids = HashSet::new();
 
-    for line in porcelain.lines() {
-        if line.len() < 3 {
+    for (id, trigger) in all_snippets {
+        let id = *id;
+        if id == 0 {
+            changed_ids.insert(id);
             continue;
         }
 
-        let raw_path = &line[3..];
-        // Rename entries are formatted as "old/path -> new/path"; the new path is
-        // what matters for deciding which id is currently changed.
-        let file_path = raw_path
-            .rsplit_once(" -> ")
-            .map_or(raw_path, |(_old, new_path)| new_path);
-        let path = Path::new(file_path);
+        let Some(server) = server_snippets.iter().find(|s| s.id == id) else {
+            eprintln!("  ⚠ Skipping snippet {id}: not found on the server");
+            continue;
+        };
 
-        if file_path.starts_with("snippets/")
-            && path.extension().is_some_and(|ext| {
-                ext.eq_ignore_ascii_case("sql") || ext.eq_ignore_ascii_case("yaml")
-            })
-            && let Some(filename) = file_path.strip_prefix("snippets/")
-            && let Some(id_str) = filename.split('-').next()
-            && let Ok(id) = id_str.parse::<u64>()
-        {
-            changed_ids.insert(id);
+        match read_local_snippet(id, trigger) {
+            Ok((body, metadata)) => {
+                if snippet_differs(&body, &metadata, server) {
+                    changed_ids.insert(id);
+                }
+            }
+            Err(e) => eprintln!("  ⚠ Skipping snippet {id}: {e}"),
         }
     }
 
-    changed_ids
-}
-
-fn get_changed_snippet_ids() -> Option<HashSet<u64>> {
-    let output = Command::new("git")
-        .args(["status", "--porcelain"])
-        .output()
-        .ok()?;
-
-    if !output.status.success() {
-        return None;
-    }
-
-    let stdout = String::from_utf8(output.stdout).ok()?;
-
-    Some(parse_changed_snippet_ids(&stdout))
+    Ok(changed_ids)
 }
 
 fn write_snippet_files(snippet: &QuerySnippet) -> Result<()> {
@@ -326,15 +344,11 @@ pub async fn deploy(client: &RedashClient, snippet_ids: Vec<u64>, all: bool) -> 
         println!("Deploying all {} snippets...\n", all_snippets.len());
         all_snippets
     } else {
-        let Some(changed_ids) = get_changed_snippet_ids() else {
-            println!("No git repository detected.");
-            println!("Tip: Use --all to deploy all snippets, or specify snippet IDs.");
-            return Ok(());
-        };
+        let changed_ids = find_changed_snippets(client, &all_snippets).await?;
 
         if changed_ids.is_empty() {
             println!("No changed snippets detected.");
-            println!("Tip: Use --all to deploy all snippets regardless of git status.");
+            println!("Tip: Use --all to deploy all snippets regardless of differences.");
             return Ok(());
         }
 
@@ -663,57 +677,63 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_changed_snippet_ids_basic() {
-        let porcelain = " M snippets/31-reviewbot_e2e_action_ctcs.sql\n M snippets/31-reviewbot_e2e_action_ctcs.yaml\n M queries/999-unrelated.sql\n";
-        let ids = parse_changed_snippet_ids(porcelain);
-        assert_eq!(ids, HashSet::from([31]));
+    fn test_snippet_differs_false_when_identical() {
+        let metadata = SnippetMetadata {
+            id: 1,
+            trigger: "t".to_string(),
+            description: None,
+        };
+        let server = make_server_snippet(1, "t", "SELECT 1", None);
+        assert!(!snippet_differs("SELECT 1", &metadata, &server));
     }
 
     #[test]
-    fn test_parse_changed_snippet_ids_untracked() {
-        let porcelain =
-            "?? snippets/42-stmo_cli_selftest.sql\n?? snippets/42-stmo_cli_selftest.yaml\n";
-        let ids = parse_changed_snippet_ids(porcelain);
-        assert_eq!(ids, HashSet::from([42]));
+    fn test_snippet_differs_true_when_body_differs() {
+        let metadata = SnippetMetadata {
+            id: 1,
+            trigger: "t".to_string(),
+            description: None,
+        };
+        let server = make_server_snippet(1, "t", "SELECT 1", None);
+        assert!(snippet_differs("SELECT 2", &metadata, &server));
     }
 
     #[test]
-    fn test_parse_changed_snippet_ids_ignores_non_snippet_extensions() {
-        let porcelain = " M snippets/31-notes.md\n";
-        let ids = parse_changed_snippet_ids(porcelain);
-        assert!(ids.is_empty());
+    fn test_snippet_differs_true_when_trigger_differs() {
+        let metadata = SnippetMetadata {
+            id: 1,
+            trigger: "local_trigger".to_string(),
+            description: None,
+        };
+        let server = make_server_snippet(1, "server_trigger", "SELECT 1", None);
+        assert!(snippet_differs("SELECT 1", &metadata, &server));
     }
 
     #[test]
-    fn test_parse_changed_snippet_ids_empty_input() {
-        assert!(parse_changed_snippet_ids("").is_empty());
+    fn test_snippet_differs_true_when_description_differs() {
+        let metadata = SnippetMetadata {
+            id: 1,
+            trigger: "t".to_string(),
+            description: Some("local".to_string()),
+        };
+        let server = make_server_snippet(1, "t", "SELECT 1", Some("server".to_string()));
+        assert!(snippet_differs("SELECT 1", &metadata, &server));
     }
 
-    #[test]
-    fn test_parse_changed_snippet_ids_short_lines_do_not_panic() {
-        // Lines shorter than the 2-char status + 1-space prefix must be skipped,
-        // not sliced into (which would panic on a short/blank line).
-        let porcelain = "\nM\n M\n M snippets/31-reviewbot_e2e_action_ctcs.sql\n";
-        let ids = parse_changed_snippet_ids(porcelain);
-        assert_eq!(ids, HashSet::from([31]));
-    }
-
-    #[test]
-    fn test_parse_changed_snippet_ids_exact_boundary_length_no_panic() {
-        // A line of exactly 3 chars (e.g. " M ") does NOT hit the `len < 3` guard,
-        // so &line[3..] slices to an empty string -- must not panic, and the empty
-        // path must not match "snippets/".
-        let porcelain = " M \n";
-        let ids = parse_changed_snippet_ids(porcelain);
-        assert!(ids.is_empty());
-    }
-
-    #[test]
-    fn test_parse_changed_snippet_ids_handles_rename() {
-        // After `snippets deploy` renames 0-*.* -> {id}-*.*, `git status --porcelain`
-        // reports a rename as "old -> new"; the *new* id must be the one detected.
-        let porcelain = "R  snippets/0-stmo_cli_selftest.sql -> snippets/42-stmo_cli_selftest.sql\nR  snippets/0-stmo_cli_selftest.yaml -> snippets/42-stmo_cli_selftest.yaml\n";
-        let ids = parse_changed_snippet_ids(porcelain);
-        assert_eq!(ids, HashSet::from([42]));
+    fn make_server_snippet(
+        id: u64,
+        trigger: &str,
+        snippet: &str,
+        description: Option<String>,
+    ) -> QuerySnippet {
+        QuerySnippet {
+            id,
+            trigger: trigger.to_string(),
+            description,
+            snippet: snippet.to_string(),
+            user: None,
+            updated_at: String::new(),
+            created_at: String::new(),
+        }
     }
 }

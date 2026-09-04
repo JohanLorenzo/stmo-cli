@@ -8,7 +8,7 @@
 
 ### Fixes
 - `init`: refuse to scaffold into a directory containing unrelated files (e.g. your home directory), which previously ran `git add .`/`git commit` over everything in it ([#42](https://github.com/mozilla/stmo-cli/issues/42))
-- `deploy`: no args now compares each tracked query against its server copy instead of asking git what changed — a freshly fetched, unmodified query no longer deploys just because it's untracked, and deploying twice in a row no longer redeploys everything the second time ([#22](https://github.com/mozilla/stmo-cli/issues/22))
+- `deploy` / `snippets deploy`: no args now compares each tracked query/snippet against its server copy instead of asking git what changed — a freshly fetched, unmodified query or snippet no longer deploys just because it's untracked, and deploying twice in a row no longer redeploys everything the second time ([#22](https://github.com/mozilla/stmo-cli/issues/22))
 
 ## [0.10.0] - 2026-09-02
 

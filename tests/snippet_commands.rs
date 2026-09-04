@@ -40,45 +40,6 @@ impl Drop for TempWorkDir {
     }
 }
 
-// Mirrors init.rs's clean_git_cmd(): strips inherited GIT_DIR/GIT_WORK_TREE/etc so
-// git commands in a fresh temp dir aren't redirected at a parent worktree's repo.
-fn clean_git_cmd() -> std::process::Command {
-    let mut cmd = std::process::Command::new("git");
-    cmd.env_remove("GIT_DIR")
-        .env_remove("GIT_WORK_TREE")
-        .env_remove("GIT_COMMON_DIR")
-        .env_remove("GIT_INDEX_FILE");
-    cmd
-}
-
-fn git_init_and_commit_all(dir: &std::path::Path) {
-    clean_git_cmd()
-        .arg("init")
-        .current_dir(dir)
-        .status()
-        .unwrap();
-    clean_git_cmd()
-        .args(["config", "user.name", "Test"])
-        .current_dir(dir)
-        .status()
-        .unwrap();
-    clean_git_cmd()
-        .args(["config", "user.email", "test@test"])
-        .current_dir(dir)
-        .status()
-        .unwrap();
-    clean_git_cmd()
-        .args(["add", "."])
-        .current_dir(dir)
-        .status()
-        .unwrap();
-    clean_git_cmd()
-        .args(["commit", "-m", "Initial commit"])
-        .current_dir(dir)
-        .status()
-        .unwrap();
-}
-
 #[tokio::test]
 async fn test_list_query_snippets() {
     let mock_server = wiremock::MockServer::start().await;
@@ -503,14 +464,31 @@ async fn test_deploy_bails_when_no_matching_ids() {
     );
 }
 
+// Bare `snippets deploy` (no explicit IDs, no --all) decides what to push by
+// comparing each tracked snippet's local content against the single
+// `list_query_snippets` response, instead of asking git what changed on disk.
+
 #[tokio::test]
-async fn test_deploy_returns_ok_when_not_a_git_repo() {
+async fn test_deploy_bare_skips_snippet_unchanged_from_server() {
     let _guard = get_test_lock().lock().await;
     let _temp_dir = TempWorkDir::new();
     let mock_server = wiremock::MockServer::start().await;
 
-    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    mock_list_query_snippets(&serde_json::json!([
+        {
+            "id": 31,
+            "trigger": "reviewbot_e2e_action_ctcs",
+            "description": null,
+            "snippet": "SELECT 1",
+            "user": null,
+            "updated_at": "2026-01-21T10:00:00Z",
+            "created_at": "2026-01-21T10:00:00Z"
+        }
+    ]))
+    .mount(&mock_server)
+    .await;
 
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
     std::fs::create_dir_all("snippets").unwrap();
     std::fs::write("snippets/31-reviewbot_e2e_action_ctcs.sql", "SELECT 1").unwrap();
     std::fs::write(
@@ -519,36 +497,77 @@ async fn test_deploy_returns_ok_when_not_a_git_repo() {
     )
     .unwrap();
 
-    // No git init here: get_changed_snippet_ids() must return None, and deploy()
-    // must return Ok(()) without attempting any network call (no mocks mounted).
+    // No update mock is registered — if `deploy` wrongly tried to push this
+    // unchanged snippet, the request would hit no matching mock and fail.
     let result = stmo_cli::commands::snippets::deploy(&client, vec![], false).await;
-
-    assert!(result.is_ok());
+    assert!(result.is_ok(), "Deploy failed: {:?}", result.err());
 }
 
 #[tokio::test]
-async fn test_deploy_returns_ok_when_git_repo_with_no_changes() {
+async fn test_deploy_bare_second_run_deploys_nothing() {
     let _guard = get_test_lock().lock().await;
     let _temp_dir = TempWorkDir::new();
     let mock_server = wiremock::MockServer::start().await;
 
-    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
+    // Simulate the server's content changing once the snippet is deployed:
+    // the first list (consumed by the comparison before deploying) still has
+    // the old body; every list after that (the second `deploy` call) has the
+    // new body that was just pushed.
+    mock_list_query_snippets(&serde_json::json!([
+        {
+            "id": 31,
+            "trigger": "reviewbot_e2e_action_ctcs",
+            "description": null,
+            "snippet": "SELECT 1",
+            "user": null,
+            "updated_at": "2026-01-21T10:00:00Z",
+            "created_at": "2026-01-21T10:00:00Z"
+        }
+    ]))
+    .up_to_n_times(1)
+    .with_priority(1)
+    .mount(&mock_server)
+    .await;
+    mock_list_query_snippets(&serde_json::json!([
+        {
+            "id": 31,
+            "trigger": "reviewbot_e2e_action_ctcs",
+            // Matches what mock_update_query_snippet below returns — after the
+            // first deploy, write_snippet_files() rewrites the local yaml from
+            // exactly that response, so the second comparison must see the
+            // same description here to correctly detect no diff.
+            "description": "Test snippet",
+            "snippet": "SELECT 2",
+            "user": null,
+            "updated_at": "2026-01-21T10:00:00Z",
+            "created_at": "2026-01-21T10:00:00Z"
+        }
+    ]))
+    .with_priority(2)
+    .mount(&mock_server)
+    .await;
+    mock_update_query_snippet(31, "reviewbot_e2e_action_ctcs", "SELECT 2")
+        .expect(1)
+        .mount(&mock_server)
+        .await;
 
+    let client = RedashClient::new(mock_server.uri(), "test-key").unwrap();
     std::fs::create_dir_all("snippets").unwrap();
-    std::fs::write("snippets/31-reviewbot_e2e_action_ctcs.sql", "SELECT 1").unwrap();
+    std::fs::write("snippets/31-reviewbot_e2e_action_ctcs.sql", "SELECT 2").unwrap();
     std::fs::write(
         "snippets/31-reviewbot_e2e_action_ctcs.yaml",
         "id: 31\ntrigger: reviewbot_e2e_action_ctcs\ndescription: null\n",
     )
     .unwrap();
 
-    git_init_and_commit_all(&env::current_dir().unwrap());
+    let first = stmo_cli::commands::snippets::deploy(&client, vec![], false).await;
+    assert!(first.is_ok(), "First deploy failed: {:?}", first.err());
 
-    // Everything is committed, so git status --porcelain is empty and deploy()
-    // must return Ok(()) without attempting any network call (no mocks mounted).
-    let result = stmo_cli::commands::snippets::deploy(&client, vec![], false).await;
+    let second = stmo_cli::commands::snippets::deploy(&client, vec![], false).await;
+    assert!(second.is_ok(), "Second deploy failed: {:?}", second.err());
 
-    assert!(result.is_ok());
+    // The update mock has `.expect(1)` — verify() fails if it was hit twice.
+    mock_server.verify().await;
 }
 
 #[tokio::test]

@@ -66,7 +66,7 @@ changing a snippet it's used in.
 
 **snippets list**: List query snippets from Redash (id, trigger, description)
 **snippets fetch**: Download snippets (`--all` for tracked, or `<ids>`)
-**snippets deploy**: Upload changes (no args = git-changed files only or all if not in a git repo, `--all` for everything, or `<ids>`)
+**snippets deploy**: Upload changes (no args = only snippets whose local content differs from Redash, `--all` for everything regardless of differences, or `<ids>`)
 **snippets delete**: Delete snippets in Redash **and** remove local files (`<ids>`) — snippets have no archive concept, so this is a direct, irreversible delete (unlike `archive`, which keeps the resource recoverable via `unarchive`)
 
 Examples:

@@ -161,7 +161,7 @@ possible, anything that isn't valid JSON is treated as a plain string.
 stmo-cli snippets list                     # List query snippets from Redash
 stmo-cli snippets fetch 31 42              # Fetch specific snippets
 stmo-cli snippets fetch --all              # Fetch all tracked snippets
-stmo-cli snippets deploy                   # Deploy changed snippets (detected via git status)
+stmo-cli snippets deploy                   # Deploy snippets whose local content differs from what's on Redash
 stmo-cli snippets deploy --all             # Deploy all snippets
 stmo-cli snippets delete 31 42             # Delete snippets in Redash and remove local files
 ```
