@@ -2,10 +2,30 @@
 
 use crate::api::RedashClient;
 use anyhow::Result;
+use std::path::Path;
 
 fn format_resource_line(id: u64, name: &str, url: &str, is_draft: bool) -> String {
     let draft = if is_draft { " [DRAFT]" } else { "" };
     format!("  {id} - {name}{draft}\n  {url}")
+}
+
+// discover never touches the filesystem to decide what to print — the caller
+// passes in what it already knows, so this stays trivially unit-testable.
+fn next_steps(queries_dir_exists: bool, first_query_id: Option<u64>) -> String {
+    if let Some(id) = first_query_id {
+        if queries_dir_exists {
+            format!("\nNext: stmo-cli fetch {id}")
+        } else {
+            format!(
+                "\nNo queries/ directory here.\nRun 'stmo-cli init <dir>' to set one up, \
+                 then 'stmo-cli fetch {id}'."
+            )
+        }
+    } else {
+        "\nNo queries of your own on Redash yet.\nTry 'stmo-cli discover --search <term>' \
+         to find other people's."
+            .to_string()
+    }
 }
 
 pub async fn discover(client: &RedashClient, search: Option<&str>, limit: usize) -> Result<()> {
@@ -28,7 +48,10 @@ async fn discover_own_queries(client: &RedashClient) -> Result<()> {
         println!("  {} - {}{}{}", query.id, query.name, archived, draft);
     }
 
-    println!("\nUse 'stmo-cli init' to create the queries directory.");
+    println!(
+        "{}",
+        next_steps(Path::new("queries").exists(), queries.first().map(|q| q.id))
+    );
 
     Ok(())
 }
@@ -103,5 +126,26 @@ mod tests {
         let line = format_resource_line(7, "WIP", "https://example.com/dashboard/wip", true);
         assert!(line.contains("[DRAFT]"));
         assert!(line.contains("WIP"));
+    }
+
+    #[test]
+    fn next_steps_dir_exists_suggests_fetch() {
+        let message = next_steps(true, Some(123));
+        assert!(message.contains("fetch 123"));
+        assert!(!message.contains("init"));
+    }
+
+    #[test]
+    fn next_steps_dir_missing_suggests_init() {
+        let message = next_steps(false, Some(123));
+        assert!(message.contains("queries/"));
+        assert!(message.contains("stmo-cli init"));
+    }
+
+    #[test]
+    fn next_steps_no_queries_suggests_search() {
+        let message = next_steps(false, None);
+        assert!(message.contains("--search"));
+        assert!(!message.contains("stmo-cli init"));
     }
 }
