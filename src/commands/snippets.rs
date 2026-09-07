@@ -1,7 +1,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 use anyhow::{Context, Result, bail};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
@@ -73,12 +73,39 @@ fn extract_snippet_ids_from_directory() -> Result<Vec<u64>> {
     extract_snippet_ids_from_path(Path::new("snippets"))
 }
 
+fn bail_on_duplicate_ids(paths_by_id: &HashMap<u64, Vec<String>>) -> Result<()> {
+    let mut conflicts: Vec<_> = paths_by_id
+        .iter()
+        .filter(|(_, paths)| paths.len() > 1)
+        .collect();
+
+    if conflicts.is_empty() {
+        return Ok(());
+    }
+
+    conflicts.sort_by_key(|(id, _)| **id);
+    let details: Vec<String> = conflicts
+        .into_iter()
+        .map(|(id, paths)| {
+            let mut paths = paths.clone();
+            paths.sort();
+            format!("  id {id}: {}", paths.join(", "))
+        })
+        .collect();
+
+    bail!(
+        "Multiple local files claim the same id — resolve the conflict before deploying:\n{}",
+        details.join("\n")
+    );
+}
+
 fn get_all_snippet_metadata_from_path(snippets_dir: &Path) -> Result<Vec<(u64, String)>> {
     if !snippets_dir.exists() {
         bail!("snippets directory not found. Run 'stmo-cli snippets fetch' first.");
     }
 
     let mut snippets = Vec::new();
+    let mut paths_by_id: HashMap<u64, Vec<String>> = HashMap::new();
 
     for entry in fs::read_dir(snippets_dir).context("Failed to read snippets directory")? {
         let entry = entry.context("Failed to read directory entry")?;
@@ -91,9 +118,15 @@ fn get_all_snippet_metadata_from_path(snippets_dir: &Path) -> Result<Vec<(u64, S
             let metadata: SnippetMetadata = serde_yaml::from_str(&metadata_content)
                 .context(format!("Failed to parse {}", path.display()))?;
 
+            paths_by_id
+                .entry(metadata.id)
+                .or_default()
+                .push(path.display().to_string());
             snippets.push((metadata.id, metadata.trigger));
         }
     }
+
+    bail_on_duplicate_ids(&paths_by_id)?;
 
     snippets.sort_by_key(|(id, _)| *id);
 
@@ -674,6 +707,31 @@ mod tests {
         let result = get_all_snippet_metadata_from_path(dir);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Failed to parse"));
+    }
+
+    #[test]
+    fn test_get_all_snippet_metadata_from_path_rejects_duplicate_ids() {
+        let temp_dir = TempDir::new().unwrap();
+        let dir = temp_dir.path();
+
+        fs::write(
+            dir.join("120506-first-trigger.yaml"),
+            "id: 120506\ntrigger: first_trigger\ndescription: null\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.join("120506-second-trigger.yaml"),
+            "id: 120506\ntrigger: second_trigger\ndescription: null\n",
+        )
+        .unwrap();
+
+        let result = get_all_snippet_metadata_from_path(dir);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Multiple local files claim the same id"));
+        assert!(err_msg.contains("id 120506"));
+        assert!(err_msg.contains("120506-first-trigger.yaml"));
+        assert!(err_msg.contains("120506-second-trigger.yaml"));
     }
 
     #[test]

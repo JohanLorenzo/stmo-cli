@@ -3,7 +3,7 @@
 use crate::api::RedashClient;
 use crate::models::{Query, QueryMetadata, Visualization, VisualizationMetadata};
 use anyhow::{Context, Result, bail};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
@@ -168,14 +168,13 @@ async fn find_changed_queries(
     changed_ids
 }
 
-fn get_all_query_metadata() -> Result<Vec<(u64, String)>> {
-    let queries_dir = Path::new("queries");
-
+fn get_all_query_metadata_from_path(queries_dir: &Path) -> Result<Vec<(u64, String)>> {
     if !queries_dir.exists() {
         bail!("queries directory not found. Run 'stmo-cli fetch' first.");
     }
 
     let mut queries = Vec::new();
+    let mut paths_by_id: HashMap<u64, Vec<String>> = HashMap::new();
 
     for entry in fs::read_dir(queries_dir).context("Failed to read queries directory")? {
         let entry = entry.context("Failed to read directory entry")?;
@@ -188,13 +187,49 @@ fn get_all_query_metadata() -> Result<Vec<(u64, String)>> {
             let metadata: crate::models::QueryMetadata = serde_yaml::from_str(&metadata_content)
                 .context(format!("Failed to parse {}", path.display()))?;
 
+            paths_by_id
+                .entry(metadata.id)
+                .or_default()
+                .push(path.display().to_string());
             queries.push((metadata.id, metadata.name));
         }
     }
 
+    bail_on_duplicate_ids(&paths_by_id)?;
+
     queries.sort_by_key(|(id, _)| *id);
 
     Ok(queries)
+}
+
+fn bail_on_duplicate_ids(paths_by_id: &HashMap<u64, Vec<String>>) -> Result<()> {
+    let mut conflicts: Vec<_> = paths_by_id
+        .iter()
+        .filter(|(_, paths)| paths.len() > 1)
+        .collect();
+
+    if conflicts.is_empty() {
+        return Ok(());
+    }
+
+    conflicts.sort_by_key(|(id, _)| **id);
+    let details: Vec<String> = conflicts
+        .into_iter()
+        .map(|(id, paths)| {
+            let mut paths = paths.clone();
+            paths.sort();
+            format!("  id {id}: {}", paths.join(", "))
+        })
+        .collect();
+
+    bail!(
+        "Multiple local files claim the same id — resolve the conflict before deploying:\n{}",
+        details.join("\n")
+    );
+}
+
+fn get_all_query_metadata() -> Result<Vec<(u64, String)>> {
+    get_all_query_metadata_from_path(Path::new("queries"))
 }
 
 async fn deploy_visualizations(
@@ -695,5 +730,65 @@ mod tests {
         let mut server = make_server_query("SELECT 1", "Q", 1);
         server.visualizations = vec![make_visualization(1, "Chart")];
         assert!(tracked_query_differs("SELECT 1", &metadata, &server));
+    }
+
+    const MINIMAL_QUERY_METADATA_YAML: &str =
+        "data_source_id: 1\noptions:\n  parameters: []\nvisualizations: []\n";
+
+    #[test]
+    fn test_get_all_query_metadata_from_path_basic() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let dir = temp_dir.path();
+
+        fs::write(
+            dir.join("42-my-query.yaml"),
+            format!("id: 42\nname: my-query\n{MINIMAL_QUERY_METADATA_YAML}"),
+        )
+        .unwrap();
+
+        let metadata = get_all_query_metadata_from_path(dir).unwrap();
+        assert_eq!(metadata, vec![(42, "my-query".to_string())]);
+    }
+
+    #[test]
+    fn test_get_all_query_metadata_from_path_missing_directory_errors() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let missing = temp_dir.path().join("does-not-exist");
+
+        let result = get_all_query_metadata_from_path(&missing);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("queries directory not found")
+        );
+    }
+
+    #[test]
+    fn test_get_all_query_metadata_from_path_rejects_duplicate_ids() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let dir = temp_dir.path();
+
+        fs::write(
+            dir.join("120506-claude-code-direct-reports-model-mix.yaml"),
+            format!(
+                "id: 120506\nname: claude-code-direct-reports-model-mix\n{MINIMAL_QUERY_METADATA_YAML}"
+            ),
+        )
+        .unwrap();
+        fs::write(
+            dir.join("120506-claude-code-user-model-mix.yaml"),
+            format!("id: 120506\nname: claude-code-user-model-mix\n{MINIMAL_QUERY_METADATA_YAML}"),
+        )
+        .unwrap();
+
+        let result = get_all_query_metadata_from_path(dir);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Multiple local files claim the same id"));
+        assert!(err_msg.contains("id 120506"));
+        assert!(err_msg.contains("claude-code-direct-reports-model-mix.yaml"));
+        assert!(err_msg.contains("claude-code-user-model-mix.yaml"));
     }
 }
